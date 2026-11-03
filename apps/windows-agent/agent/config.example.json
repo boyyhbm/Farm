@@ -11,5 +11,6 @@
   "log_level": "INFO",
   "automatic_updates": false,
   "update_manifest_url": null,
-  "update_check_seconds": 3600
+  "update_check_seconds": 3600,
+  "ca_file": null
 }

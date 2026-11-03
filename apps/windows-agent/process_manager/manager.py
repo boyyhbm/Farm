@@ -75,7 +75,7 @@ class ProcessManager:
             interpreter = str(installed_python) if os.name == "nt" and installed_python.is_file() else sys.executable
             if Path(interpreter).name.lower() == "pythonservice.exe":
                 raise RuntimeError("Installed Python interpreter not found for synthetic test subprocess")
-            argv = [interpreter, "-m", "gameplay_test_engine.run", "--session", session_id,
+            argv = ([sys.executable, "engine"] if getattr(sys, "frozen", False) else [interpreter, "-m", "gameplay_test_engine.run"]) + ["--session", session_id,
                     "--config", json.dumps({k: v for k, v in payload.items() if k not in {"min_ram_gb", "max_cpu_percent"}}, separators=(",", ":"), allow_nan=False)]
         else:
             argv = [self.config.steam_path if kind == "steam" else self.config.cs2_path]
@@ -89,7 +89,7 @@ class ProcessManager:
                 proc = launch_interactive(argv)
             else:
                 proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                        shell=False, cwd=str(Path(__file__).resolve().parents[1]) if kind == "test" else None, creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0)
+                                        shell=False, cwd=str(Path(__file__).resolve().parents[1]) if kind == "test" else None, creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW) if os.name == "nt" else 0)
             if os.name == "nt":
                 from process_manager.windows import attach_job
                 self.jobs[session_id] = attach_job(proc.pid)

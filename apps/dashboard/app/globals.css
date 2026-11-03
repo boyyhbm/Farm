@@ -1807,3 +1807,129 @@ input[type="checkbox"] {
   padding: 8px;
   min-height: 34px;
 }
+
+.system-management {
+  margin-bottom: 24px;
+}
+.system-management-body {
+  padding: 0 24px 24px;
+}
+.system-management-body > .error-banner {
+  margin-bottom: 18px;
+}
+.system-version {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 24px;
+  font-size: 12px;
+  color: var(--muted);
+  margin: 20px 0;
+}
+.system-version strong {
+  color: var(--text);
+  font-weight: 500;
+}
+.system-health-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+.system-health-grid article {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  min-width: 0;
+}
+.system-health-grid article > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.system-health-grid strong {
+  font-size: 15px;
+  overflow-wrap: anywhere;
+}
+.system-health-grid small {
+  font-size: 10px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.system-health-ready,
+.system-health-running {
+  color: #79d8a7;
+}
+.system-health-stopped,
+.system-health-unavailable,
+.system-error {
+  color: #ee9d96;
+}
+.system-actions {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.system-explanation {
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 18px 0;
+}
+.system-error {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.system-diagnostics {
+  margin-top: 18px;
+}
+.system-diagnostics h3 {
+  font-size: 13px;
+}
+.system-diagnostics dl > div {
+  border-bottom: 1px solid var(--border);
+  display: grid;
+  grid-template-columns: 150px 1fr;
+  gap: 12px;
+  padding: 12px 0;
+  font-size: 11px;
+}
+.system-diagnostics dd {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  color: var(--muted);
+  margin: 0;
+}
+.system-diagnostics dd strong {
+  color: var(--text);
+}
+.agent-installer {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  margin: 16px 0;
+}
+.agent-installer small {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+@media (max-width: 900px) {
+  .system-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 520px) {
+  .system-management-body {
+    padding: 0 15px 18px;
+  }
+  .system-health-grid {
+    grid-template-columns: 1fr;
+  }
+  .system-diagnostics dl > div {
+    grid-template-columns: 1fr;
+  }
+}

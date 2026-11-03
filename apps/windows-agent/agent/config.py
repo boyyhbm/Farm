@@ -17,6 +17,7 @@ class Config:
     allow_insecure_localhost: bool = False
     update_public_key: str | None = None
     allowed_update_host: str | None = None
+    ca_file: str | None = None
     log_level: str = "INFO"
     automatic_updates: bool = False
     update_manifest_url: str | None = None
@@ -32,8 +33,14 @@ class Config:
             if not (config.allow_insecure_localhost and parsed.scheme == "http" and
                     parsed.hostname in {"localhost", "127.0.0.1", "::1"}):
                 raise ValueError("HTTPS is required; insecure localhost requires explicit opt-in")
-        if parsed.username or parsed.password or not parsed.hostname:
+        if parsed.username or parsed.password or not parsed.hostname or parsed.query or parsed.fragment:
             raise ValueError("Invalid server URL")
+        if config.ca_file:
+            import ssl
+            ca = Path(config.ca_file)
+            if not ca.is_absolute() or not ca.is_file():
+                raise ValueError("Trusted CA must be an existing absolute local path")
+            ssl.create_default_context().load_verify_locations(cafile=str(ca))
         if not 5 <= config.heartbeat_seconds <= 15:
             raise ValueError("Heartbeat interval must be 5..15 seconds")
         if not 1 <= config.test_capacity <= 32:

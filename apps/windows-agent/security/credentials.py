@@ -8,10 +8,10 @@ from pathlib import Path
 def restrict_path(path: Path):
     if os.name == "nt":
         # LocalSystem and current owner only; remove inherited permissions.
-        owner = subprocess.check_output(["whoami", "/user", "/fo", "csv", "/nh"], text=True).strip().split(",")[-1].strip('"')
+        owner = subprocess.check_output(["whoami", "/user", "/fo", "csv", "/nh"], text=True, creationflags=subprocess.CREATE_NO_WINDOW).strip().split(",")[-1].strip('"')
         subprocess.run(["icacls", str(path), "/inheritance:r", "/grant:r", f"*{owner}:(OI)(CI)F" if path.is_dir() else f"*{owner}:F",
                         "*S-1-5-18:(OI)(CI)F" if path.is_dir() else "*S-1-5-18:F",
-                        "*S-1-5-32-544:(OI)(CI)F" if path.is_dir() else "*S-1-5-32-544:F"], check=True, capture_output=True)
+                        "*S-1-5-32-544:(OI)(CI)F" if path.is_dir() else "*S-1-5-32-544:F"], check=True, capture_output=True, creationflags=subprocess.CREATE_NO_WINDOW)
     else:
         path.chmod(0o700 if path.is_dir() else 0o600)
 

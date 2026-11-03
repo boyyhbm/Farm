@@ -1,0 +1,9 @@
+{
+  "key": "cpython-3.12.14-windows-x86_64-none",
+  "version": "3.12.14",
+  "platform": "windows-x86_64",
+  "url": "https://releases.astral.sh/github/python-build-standalone/releases/download/20260929/cpython-3.12.14%2B20260929-x86_64-pc-windows-msvc-install_only_stripped.tar.gz",
+  "python_exe_sha256": "1326cf78aeef6a027dee9fc991cdf275b113a7360e6d7db3c3e196b49fad1b10",
+  "uv_version": "0.13.4",
+  "provider": "Astral python-build-standalone; downloaded and integrity-checked by pinned uv managed Python"
+}

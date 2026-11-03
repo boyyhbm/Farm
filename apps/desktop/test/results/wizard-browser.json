@@ -1,0 +1,8 @@
+{
+  "checkedAt": "2026-11-03T18:57:42.430Z",
+  "scope": "Chromium local HTML with explicitly mocked IPC; not Electron or Windows installation",
+  "six_step_flow": true,
+  "password_cleared_after_setup": true,
+  "pageErrors": [],
+  "passed": true
+}

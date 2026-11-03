@@ -1,0 +1,41 @@
+{
+  "checked_at": "2026-11-03T19:48:34.496919+00:00",
+  "scope": "PE structure, complete NSIS container CRC and checksum; no Windows installation or launch executed",
+  "artifacts": [
+    {
+      "filename": "CS2-Farm-Manager-Setup.exe",
+      "size_bytes": 443632991,
+      "sha256": "0cc58b01c00edc01b841a05cab2318ea2a8a377ba4865684a0ae0d8548556bff",
+      "pe_machine": "0x14c",
+      "nsis_container": true,
+      "crc32_valid": true,
+      "length_valid": true,
+      "authenticode": "unsigned",
+      "windows_executed": false
+    },
+    {
+      "filename": "CS2-Farm-Agent-Setup.exe",
+      "size_bytes": 204210771,
+      "sha256": "18ae820b94a19eecad97819c84d351d875b61a9a505a42efadccece975d98b25",
+      "pe_machine": "0x14c",
+      "nsis_container": true,
+      "crc32_valid": true,
+      "length_valid": true,
+      "authenticode": "unsigned",
+      "windows_executed": false
+    }
+  ],
+  "payload_checks": {
+    "python": {
+      "windows_x64_pe": true,
+      "sha256": "1326cf78aeef6a027dee9fc991cdf275b113a7360e6d7db3c3e196b49fad1b10"
+    },
+    "node": {
+      "windows_x64_pe": true,
+      "sha256": "d702daa815eabbff763c7d3808e235cf031cf2ca70211b56847bc72f51e240e5"
+    },
+    "current_server_sources_match": true,
+    "agent_installer_bundled_matches": true,
+    "dashboard_server_present": true
+  }
+}

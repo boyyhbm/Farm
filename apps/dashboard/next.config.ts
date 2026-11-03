@@ -4,6 +4,10 @@ const config: NextConfig = {
   async rewrites() {
     return [
       {
+        source: "/health/ready",
+        destination: `${process.env.API_URL || "http://127.0.0.1:8000"}/health/ready`,
+      },
+      {
         source: "/api/:path*",
         destination: `${process.env.API_URL || "http://127.0.0.1:8000"}/api/:path*`,
       },

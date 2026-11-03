@@ -1,0 +1,90 @@
+name: Windows desktop installers
+
+on:
+  workflow_dispatch:
+    inputs:
+      runtime:
+        description: Windows Python packaging layout
+        type: choice
+        options: [embedded, frozen]
+        default: embedded
+  push:
+    tags: ['desktop-v*']
+  pull_request:
+    paths:
+      - 'apps/desktop/**'
+      - 'apps/api/**'
+      - 'apps/windows-agent/**'
+      - 'apps/dashboard/**'
+      - 'packages/**'
+      - 'build/windows/**'
+      - 'scripts/build-windows.ps1'
+      - 'scripts/build-windows-cross.py'
+      - '.github/workflows/windows-desktop.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-install:
+    runs-on: windows-2022
+    timeout-minutes: 60
+    env:
+      PYTHONUTF8: '1'
+      FARM_RUNTIME_BUILD: ${{ inputs.runtime || 'embedded' }}
+      NEXT_TELEMETRY_DISABLED: '1'
+      # Next rewrites are compiled at build time and match the supervisor's fixed loopback API port.
+      API_URL: http://127.0.0.1:17831
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          cache-dependency-path: |
+            apps/dashboard/package-lock.json
+            apps/desktop/package-lock.json
+      - name: Install hash-locked native build and application dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --require-hashes -r build/windows/requirements.lock
+          npm ci --prefix apps/dashboard
+          npm ci --prefix apps/desktop
+      - name: Python unit tests and SQLite runtime integration without Redis or PostgreSQL
+        shell: pwsh
+        env:
+          PYTHONPATH: apps/api;apps/windows-agent;packages/gameplay-test-engine
+        run: python -m pytest tests/unit tests/integration/test_desktop_runtime.py -q --junitxml=artifacts/windows/verification/python-tests.xml
+      - name: Native build, bundled runtimes and NSIS installers
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+        run: |
+          if ($env:FARM_RUNTIME_BUILD -eq 'frozen') {
+            ./scripts/build-windows.ps1 -SkipInstall
+          } else {
+            python scripts/build-windows-cross.py
+          }
+      - name: Desktop unit tests
+        shell: pwsh
+        run: npm test --prefix apps/desktop
+      - name: Install, exercise actual bundled application, uninstall
+        shell: pwsh
+        run: ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification"
+      - name: Upload genuine installers and build verification
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: CS2-Farm-Windows-x64
+          if-no-files-found: warn
+          retention-days: 14
+          path: |
+            artifacts/windows/manager/CS2-Farm-Manager-Setup.exe
+            artifacts/windows/agent/CS2-Farm-Agent-Setup.exe
+            artifacts/windows/build-manifest.json
+            artifacts/windows/verification/**

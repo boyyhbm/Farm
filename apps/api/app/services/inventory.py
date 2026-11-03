@@ -45,6 +45,26 @@ def _rate_limit(bucket: str = "inventory", interval: float | None = None) -> Non
     cooldown in addition to normal spacing. Sleep is bounded; Celery retries long
     cooldowns rather than tying up a worker.
     """
+    if settings().deployment_mode == "desktop":
+        from app.core.local_store import LocalStore
+
+        store = LocalStore()
+        cooldown = store.ttl("steam:cooldown")
+        if cooldown:
+            raise InventoryUnavailable(
+                "Steam request cooldown active", retry_after=cooldown
+            )
+        spacing = (
+            interval
+            if interval is not None
+            else float(os.getenv("STEAM_REQUEST_INTERVAL", "2"))
+        )
+        wait = store.reserve_slot("steam:rate:" + bucket, max(0.25, spacing))
+        if wait > 0:
+            raise InventoryUnavailable(
+                "Steam request queue busy", retry_after=max(1, int(wait + 1))
+            )
+        return
     import redis
 
     spacing = (
@@ -86,6 +106,11 @@ def _rate_limit(bucket: str = "inventory", interval: float | None = None) -> Non
 
 
 def _cooldown(seconds: int) -> None:
+    if settings().deployment_mode == "desktop":
+        from app.core.local_store import LocalStore
+
+        LocalStore().put("steam:cooldown", True, min(max(seconds, 1), 86400))
+        return
     import redis
 
     try:

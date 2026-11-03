@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event
 from sqlalchemy.orm import DeclarativeBase, sessionmaker
 from .config import settings
 
@@ -27,6 +27,15 @@ engine = create_engine(
         else {}
     ),
 )
+if settings().database_url.startswith("sqlite"):
+
+    @event.listens_for(engine, "connect")
+    def sqlite_pragmas(connection, record):
+        connection.execute("PRAGMA foreign_keys=ON")
+        connection.execute("PRAGMA busy_timeout=10000")
+        connection.execute("PRAGMA journal_mode=WAL")
+
+
 SessionLocal = sessionmaker(engine, expire_on_commit=False)
 
 

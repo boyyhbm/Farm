@@ -1,0 +1,4 @@
+-r ../../apps/api/requirements.txt
+pywin32==311
+pyinstaller==6.22.3
+uv==0.13.4

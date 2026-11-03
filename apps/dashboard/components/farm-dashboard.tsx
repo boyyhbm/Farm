@@ -45,6 +45,10 @@ import {
   Bar,
 } from "recharts";
 import { Button } from "@/components/ui/button";
+import {
+  AgentInstaller,
+  SystemManagement,
+} from "@/components/system-management";
 import { DataTable, Status, display } from "@/components/data-table";
 import { ActionDialog, type FormSpec } from "@/components/action-dialog";
 import { api, ApiError, setCsrf, download, allPages } from "@/services/api";
@@ -1601,15 +1605,16 @@ export default function FarmDashboard() {
               <div className="section-info">
                 <p>
                   {t(
-                    "Каждый физический компьютер подключается через одноразовый токен. Запуск Steam требует интерактивного рабочего стола Windows.",
-                    "Each physical computer enrolls with a one-time token. Steam requires an interactive Windows desktop.",
+                    "Скачайте установщик агента, запустите мастер на другом ПК и введите адрес доверенного HTTPS-сервера и одноразовый код. Адрес localhost не подходит для другого компьютера. Запуск Steam требует интерактивного рабочего стола Windows.",
+                    "Download the agent installer, run its wizard on another PC, and enter the trusted HTTPS server address and a one-time code. Localhost cannot connect another computer. Steam requires an interactive Windows desktop.",
                   )}
                 </p>
               </div>
+              <AgentInstaller ru={ru} />
               <DataTable
                 {...tableProps}
                 actions={
-                  canWrite && (
+                  me.data?.role === "admin" && (
                     <Button
                       size="sm"
                       onClick={() =>
@@ -2876,14 +2881,15 @@ export default function FarmDashboard() {
           )}
           {section === "settings" && (
             <>
+              <SystemManagement ru={ru} admin={me.data?.role === "admin"} />
               <section className="panel settings-panel">
                 <div className="panel-heading">
                   <div>
                     <h2>{t("Настройки системы", "System configuration")}</h2>
                     <p>
                       {t(
-                        "Секреты задаются переменными окружения на сервере.",
-                        "Secrets are configured through server environment variables.",
+                        "Конфигурация текущего сервера. Секреты не передаются в браузер.",
+                        "Current server configuration. Secrets are never sent to the browser.",
                       )}
                     </p>
                   </div>

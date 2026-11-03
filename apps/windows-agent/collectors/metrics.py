@@ -4,7 +4,9 @@ import json
 import os
 import platform
 import shutil
+import subprocess
 import psutil
+from pathlib import Path
 
 
 def hardware(config):
@@ -12,7 +14,7 @@ def hardware(config):
     return {"cpu": platform.processor() or platform.machine(), "logical_cpus": psutil.cpu_count(),
             "ram_gb": round(psutil.virtual_memory().total / 1024**3, 2),
             "disk_gb": round(disk.total / 1024**3, 2), "gpu": None,
-            "installed": {"steam": bool(config.steam_path), "cs2": bool(config.cs2_path), "test": True},
+            "installed": {"steam": bool(config.steam_path and Path(config.steam_path).is_file()), "cs2": bool(config.cs2_path and Path(config.cs2_path).is_file()), "test": True},
             "test_capacity": config.test_capacity}
 
 
@@ -34,7 +36,7 @@ async def collect(config):
     if nvidia_smi:
         try:
             proc = await asyncio.create_subprocess_exec(nvidia_smi, "--query-gpu=name,utilization.gpu", "--format=csv,noheader,nounits",
-                                                       stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL)
+                                                       stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.DEVNULL, creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0)
             try:
                 output, _ = await asyncio.wait_for(proc.communicate(), 2)
             except TimeoutError:

@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-11-03T19:34:22.632Z",
+  "environment": "Real Node supervisor, Python API, SQLite durable queue and production Next standalone on linux; not an Electron or Windows installer test",
+  "checks": [
+    {
+      "name": "runtime_creates_database_and_admin_without_redis",
+      "passed": true
+    },
+    {
+      "name": "actual_backend_worker_next_start_health_identity",
+      "passed": true
+    },
+    {
+      "name": "actual_dashboard_proxy_auth_and_database_write",
+      "passed": true
+    },
+    {
+      "name": "gui_runtime_backup_command_creates_snapshot",
+      "passed": true
+    },
+    {
+      "name": "account_and_auth_session_persist_after_full_restart",
+      "passed": true
+    },
+    {
+      "name": "restore_invalidates_old_sessions",
+      "passed": true
+    },
+    {
+      "name": "restore_replaces_database_with_verified_snapshot",
+      "passed": true
+    },
+    {
+      "name": "all_owned_server_components_stop",
+      "passed": true
+    }
+  ],
+  "passed": true
+}

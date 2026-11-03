@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "CS2 Farm Manager",
-    "version": "0.1.0"
+    "version": "0.2.0"
   },
   "paths": {
     "/health": {
@@ -2182,6 +2182,54 @@
       "get": {
         "summary": "Overview",
         "operationId": "overview_api_v1_dashboard_overview_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/status": {
+      "get": {
+        "summary": "System Status",
+        "operationId": "system_status_api_v1_system_status_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/system/diagnostics": {
+      "get": {
+        "summary": "System Diagnostics",
+        "operationId": "system_diagnostics_api_v1_system_diagnostics_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/downloads/agent": {
+      "get": {
+        "summary": "Download Agent",
+        "operationId": "download_agent_api_v1_downloads_agent_get",
         "responses": {
           "200": {
             "description": "Successful Response",

@@ -59,7 +59,8 @@ async def stage_update(manifest_url: str, config):
         if parsed.scheme != "https" or parsed.hostname != config.allowed_update_host or parsed.username or parsed.password:
             raise ValueError("Update URL must use HTTPS on the locally pinned update host")
     check_url(manifest_url)
-    async with httpx.AsyncClient(timeout=60, follow_redirects=False) as client:
+    from transport.client import tls_context
+    async with httpx.AsyncClient(timeout=60, follow_redirects=False, verify=tls_context(config)) as client:
         content = bytearray()
         async with client.stream("GET", manifest_url) as response:
             response.raise_for_status()

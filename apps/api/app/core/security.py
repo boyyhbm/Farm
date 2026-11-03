@@ -6,7 +6,7 @@ from fastapi import Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.core.db import get_db, utcnow, aware
-from app.core.config import settings
+from app.core.config import settings, allowed_origin
 from app.models.models import User, AuthSession, AuditLog, Role, Control
 
 hasher = PasswordHasher()
@@ -58,7 +58,7 @@ def authenticate(request: Request, db: Session = Depends(get_db)):
         raise HTTPException(401, "Access revoked")
     request.state.auth_session = session
     if request.method not in ("GET", "HEAD", "OPTIONS"):
-        if request.headers.get("origin") != settings().public_origin:
+        if not allowed_origin(request.headers.get("origin")):
             raise HTTPException(403, "Invalid Origin")
         if not secrets.compare_digest(
             request.headers.get("x-csrf-token", ""), session.csrf_token

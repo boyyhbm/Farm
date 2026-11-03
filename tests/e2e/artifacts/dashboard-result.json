@@ -1,6 +1,8 @@
 {
-  "checked_at": "2026-11-03T06:49:14.989Z",
+  "checked_at": "2026-11-03T07:02:59.724Z",
   "sections": 11,
+  "system_management_status": true,
+  "system_management_diagnostics": true,
   "account_create_edit_delete": true,
   "mobile_navigation": true,
   "pageErrors": [],

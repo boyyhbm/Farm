@@ -73,6 +73,24 @@ const env = Object.fromEntries(
       .click();
     await page.getByRole("heading", { name: label, exact: true }).waitFor();
     await page.waitForTimeout(150);
+    if (label === "Настройки") {
+      await page
+        .getByRole("heading", { name: "System Management", exact: true })
+        .waitFor();
+      await page.locator(".system-version").waitFor();
+      if ((await page.locator(".system-health-grid article").count()) !== 4)
+        throw new Error(
+          "System Management did not render four real component checks",
+        );
+      await page
+        .getByRole("button", { name: "Диагностика соединения", exact: true })
+        .click();
+      await page
+        .getByRole("heading", { name: "Результаты диагностики", exact: true })
+        .waitFor();
+      if ((await page.locator(".system-diagnostics dl > div").count()) === 0)
+        throw new Error("Connection diagnostics returned no checks");
+    }
   }
   await page
     .getByRole("navigation")
@@ -126,6 +144,8 @@ const env = Object.fromEntries(
   const result = {
     checked_at: new Date().toISOString(),
     sections: 11,
+    system_management_status: true,
+    system_management_diagnostics: true,
     account_create_edit_delete: true,
     mobile_navigation: true,
     pageErrors: errors,

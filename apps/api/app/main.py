@@ -14,13 +14,15 @@ from fastapi import (
     Header,
 )
 from fastapi.encoders import jsonable_encoder
-from fastapi.responses import JSONResponse
-from sqlalchemy import select, func, or_, delete
+from fastapi.responses import JSONResponse, FileResponse
+from pathlib import Path
+from app.core.local_store import LocalStore
+from sqlalchemy import select, func, or_, delete, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session as DBSession
 from redis import Redis
-from app.core.config import settings
+from app.core.config import settings, allowed_origin
 from app.core.db import SessionLocal, get_db, utcnow, aware
 from app.core.security import (
     authenticate,
@@ -60,6 +62,8 @@ def redis_client():
 
 
 def publish():
+    if settings().deployment_mode == "desktop":
+        return
     try:
         redis_client().publish("farm:live", '{"type":"refresh"}')
     except Exception:
@@ -135,16 +139,28 @@ async def lifespan(app):
     if (
         settings().database_url.startswith("sqlite")
         and not settings().allow_test_sqlite
+        and settings().deployment_mode != "desktop"
     ):
         raise RuntimeError(
             "PostgreSQL required. SQLite is for explicit automated tests only."
         )
     with SessionLocal() as db:
         bootstrap(db)
-    yield
+    worker = None
+    if settings().deployment_mode == "desktop":
+        from app.workers.local_worker import DesktopWorker
+
+        worker = DesktopWorker()
+        app.state.desktop_worker = worker
+        worker.start()
+    try:
+        yield
+    finally:
+        if worker:
+            await asyncio.to_thread(worker.stop)
 
 
-app = FastAPI(title="CS2 Farm Manager", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="CS2 Farm Manager", version="0.2.0", lifespan=lifespan)
 
 
 @app.exception_handler(IntegrityError)
@@ -166,10 +182,13 @@ async def headers_and_limits(request, call_next):
                 + ("login:" if request.url.path.endswith("/auth/login") else "api:")
                 + identity
             )
-            with client.pipeline() as pipe:
-                pipe.incr(bucket)
-                pipe.expire(bucket, 60, nx=True)
-                count, _ = pipe.execute()
+            if settings().deployment_mode == "desktop":
+                count = LocalStore().counter(bucket, 60)
+            else:
+                with client.pipeline() as pipe:
+                    pipe.incr(bucket)
+                    pipe.expire(bucket, 60, nx=True)
+                    count, _ = pipe.execute()
             if count > (10 if request.url.path.endswith("/auth/login") else 600):
                 return JSONResponse(
                     status_code=429,
@@ -203,8 +222,21 @@ def ready():
     try:
         with SessionLocal() as db:
             db.execute(select(1))
-        redis_client().ping()
-        return {"status": "ready"}
+        (
+            LocalStore().ping()
+            if settings().deployment_mode == "desktop"
+            else redis_client().ping()
+        )
+        result = {"status": "ready"}
+        if settings().deployment_mode == "desktop":
+            result["desktop_instance_id"] = os.getenv("DESKTOP_INSTANCE_ID", "")
+            worker = getattr(app.state, "desktop_worker", None)
+            result["local_worker_running"] = bool(
+                worker and all(t.is_alive() for t in worker.threads)
+            )
+            if not result["local_worker_running"]:
+                raise RuntimeError("Local worker unavailable")
+        return result
     except Exception:
         raise HTTPException(503, "Database or Redis unavailable")
 
@@ -216,7 +248,7 @@ P = "/api/v1"
 def login(
     data: Login, request: Request, response: Response, db: DBSession = Depends(get_db)
 ):
-    if request.headers.get("origin") != settings().public_origin:
+    if not allowed_origin(request.headers.get("origin")):
         raise HTTPException(403, "Invalid Origin")
     user = db.scalar(
         select(User).where(User.username == data.username, User.active == True)
@@ -249,7 +281,7 @@ def login(
         "farm_session",
         token,
         httponly=True,
-        secure=settings().session_secure,
+        secure=settings().session_secure or request.url.scheme == "https",
         samesite="strict",
         max_age=settings().session_hours * 3600,
         path="/",
@@ -494,15 +526,22 @@ def enrollment_token(user=Depends(admin), db: DBSession = Depends(get_db)):
 
 @app.post(P + "/nodes/enroll")
 def enroll(data: Enrollment, request: Request, db: DBSession = Depends(get_db)):
-    token = db.scalar(
-        select(EnrollmentToken)
-        .where(EnrollmentToken.token_hash == digest(data.token))
-        .with_for_update()
+    # Conditional UPDATE is atomic on SQLite as well as PostgreSQL; row-lock hints
+    # alone do not protect one-time enrollment in the desktop adapter.
+    now = utcnow()
+    consumed = db.scalar(
+        update(EnrollmentToken)
+        .where(
+            EnrollmentToken.token_hash == digest(data.token),
+            EnrollmentToken.used_at.is_(None),
+            EnrollmentToken.expires_at > now,
+        )
+        .values(used_at=now)
+        .returning(EnrollmentToken.id)
     )
-    if not token or token.used_at or aware(token.expires_at) <= utcnow():
+    if not consumed:
         raise HTTPException(403, "Invalid, used or expired enrollment token")
     credential = secrets.token_urlsafe(48)
-    token.used_at = utcnow()
     node = Node(
         **data.model_dump(exclude={"token"}),
         credential_hash=digest(credential),
@@ -819,7 +858,14 @@ def sync(account_id: str, user=Depends(operator), db: DBSession = Depends(get_db
     from app.workers.tasks import inventory_sync
 
     try:
-        task = inventory_sync.apply_async(args=[account_id], queue="inventory")
+        if settings().deployment_mode == "desktop":
+            from types import SimpleNamespace
+
+            task = SimpleNamespace(
+                id=LocalStore().enqueue("inventory", {"account_id": account_id})
+            )
+        else:
+            task = inventory_sync.apply_async(args=[account_id], queue="inventory")
     except Exception:
         raise HTTPException(503, "Inventory queue unavailable")
     audit(db, user.username, "inventory.sync", account_id, {"task_id": task.id})
@@ -1019,7 +1065,7 @@ def get_settings(user=Depends(authenticate)):
         "node_offline_seconds": settings().node_offline_seconds,
         "retention_days": settings().retention_days,
         "manual_steam_login_required": True,
-        "version": "0.1.0",
+        "version": "0.2.0",
     }
 
 
@@ -1112,11 +1158,24 @@ async def live(ws: WebSocket):
         valid = bool(
             auth and aware(auth.expires_at) > utcnow() and user and user.active
         )
-    if not valid or ws.headers.get("origin") != settings().public_origin:
+    if not valid or not allowed_origin(ws.headers.get("origin")):
         await ws.close(code=4403)
         return
     await ws.accept()
     try:
+        if settings().deployment_mode == "desktop":
+            while True:
+                with SessionLocal() as db:
+                    auth = db.scalar(
+                        select(AuthSession).where(
+                            AuthSession.token_hash == digest(token)
+                        )
+                    )
+                    if not auth or aware(auth.expires_at) <= utcnow():
+                        await ws.close(code=4401)
+                        return
+                await ws.send_json({"type": "refresh"})
+                await asyncio.sleep(3)
         # Redis invalidation shared across replicas; periodic refresh is reconnect-safe.
         from redis.asyncio import Redis as AsyncRedis
 
@@ -1188,6 +1247,23 @@ async def agent_ws(ws: WebSocket):
                     ):
                         raise ValueError("Invalid heartbeat")
                     metrics = data["metrics"]
+                    if "hardware" in data:
+                        hardware = data["hardware"]
+                        if not isinstance(hardware, dict) or not isinstance(
+                            hardware.get("installed", {}), dict
+                        ):
+                            raise ValueError("Invalid hardware capabilities")
+                        if any(
+                            not isinstance(v, bool)
+                            for v in hardware.get("installed", {}).values()
+                        ):
+                            raise ValueError("Installed capabilities must be booleans")
+                        node.hardware = hardware
+                    if (
+                        isinstance(data.get("agent_version"), str)
+                        and len(data["agent_version"]) <= 30
+                    ):
+                        node.agent_version = data["agent_version"]
                     for key in ("cpu_percent", "ram_percent", "gpu_percent"):
                         if metrics.get(key) is not None and (
                             not isinstance(metrics[key], (float, int))
@@ -1278,3 +1354,115 @@ async def agent_ws(ws: WebSocket):
         with SessionLocal() as db:
             audit(db, f"node:{node_id}", "agent.disconnected", node_id)
             db.commit()
+
+
+@app.get(P + "/system/status")
+def system_status(user=Depends(authenticate)):
+    desktop = settings().deployment_mode == "desktop"
+    checks = {}
+    try:
+        with SessionLocal() as db:
+            db.execute(select(1))
+        checks["database"] = "ready"
+    except Exception:
+        checks["database"] = "unavailable"
+    try:
+        (LocalStore().ping() if desktop else redis_client().ping())
+        checks["queue"] = "ready"
+    except Exception:
+        checks["queue"] = "unavailable"
+    heartbeat = (
+        LocalStore().get("worker:heartbeat")
+        if desktop and checks["queue"] == "ready"
+        else None
+    )
+    return {
+        "mode": "desktop" if desktop else "server",
+        "version": "0.2.0",
+        "backend": {"status": "ready", "version": "0.2.0"},
+        "database": {
+            "engine": "sqlite" if desktop else "postgresql",
+            "status": checks["database"],
+        },
+        "queue": {
+            "engine": "sqlite" if desktop else "redis",
+            "status": checks["queue"],
+        },
+        "worker": {
+            "status": ("running" if heartbeat else "stopped")
+            if desktop
+            else "external",
+            "last_heartbeat": heartbeat.get("timestamp") if heartbeat else None,
+        },
+        "agent_installer_available": bool(
+            settings().agent_installer_path
+            and Path(settings().agent_installer_path).is_file()
+        ),
+    }
+
+
+@app.get(P + "/system/diagnostics")
+def system_diagnostics(user=Depends(admin)):
+    state = system_status(user)
+    return {
+        "checks": [
+            {
+                "name": name,
+                "status": state[name]["status"],
+                "detail": state[name].get("engine", "API runtime"),
+            }
+            for name in ("backend", "database", "queue", "worker")
+        ]
+    }
+
+
+@app.get(P + "/downloads/agent")
+def download_agent(user=Depends(authenticate)):
+    path = (
+        Path(settings().agent_installer_path)
+        if settings().agent_installer_path
+        else None
+    )
+    if not path or not path.is_file():
+        raise HTTPException(503, "Agent installer is not bundled with this deployment")
+    return FileResponse(
+        path,
+        media_type="application/vnd.microsoft.portable-executable",
+        filename="CS2-Farm-Agent-Setup.exe",
+    )
+
+
+if settings().deployment_mode == "desktop":
+
+    @app.api_route("/{path:path}", methods=["GET", "HEAD"], include_in_schema=False)
+    async def desktop_dashboard_proxy(path: str, request: Request):
+        # Same-origin HTTPS dashboard for explicitly enabled LAN access.
+        if path.split("/")[0] in ("api", "ws", "health"):
+            raise HTTPException(404, "Not found")
+        import httpx
+
+        target = settings().public_origin.rstrip("/") + "/" + path
+        if request.url.query:
+            target += "?" + request.url.query
+        try:
+            async with httpx.AsyncClient(timeout=20, trust_env=False) as client:
+                result = await client.get(
+                    target, headers={"accept": request.headers.get("accept", "*/*")}
+                )
+            headers = {
+                k: v
+                for k, v in result.headers.items()
+                if k.lower()
+                in (
+                    "content-type",
+                    "cache-control",
+                    "etag",
+                    "x-content-type-options",
+                    "x-frame-options",
+                )
+            }
+            return Response(
+                result.content, status_code=result.status_code, headers=headers
+            )
+        except httpx.HTTPError:
+            raise HTTPException(503, "Dashboard component unavailable")

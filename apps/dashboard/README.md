@@ -2,20 +2,28 @@
 
 Next.js 16 + React 19, TypeScript, Tailwind CSS 4, shadcn-style Radix components, Zustand, TanStack Query, Recharts. Backend contract: [API-CONTRACT](../../docs/API-CONTRACT.md).
 
-## Local run
+## Windows: пользовательский запуск
 
-From the repository root, after starting the API on `http://127.0.0.1:8000` with `PUBLIC_ORIGIN=http://localhost:3000` and `SESSION_SECURE=false` for local HTTP:
+Откройте установленный **CS2 Farm Manager** через ярлык рабочего стола или меню «Пуск». Мастер первого запуска предлагает главный компьютер, дополнительный узел или подключение к существующему HTTPS-серверу. Учётная запись администратора создаётся в графическом интерфейсе; пользователю не нужны Python, Node.js, Docker или терминал.
+
+В **Settings → System Management** панель показывает реальные результаты проверки API, базы и очереди. Кнопка «Открыть обслуживание» в локальной desktop-оболочке открывает её системное окно для резервного копирования, восстановления, перезапуска, просмотра ошибок и обновлений. Браузерная версия сохраняется и не получает доступ к локальным файлам или процессам.
+
+В **Nodes** скачайте поставляемый сервером **CS2-Farm-Agent-Setup.exe**, запустите графический мастер на дополнительном ПК и введите адрес доверенного HTTPS-сервера и одноразовый код из панели. Если EXE не включён в конкретную поставку сервера, панель явно сообщает об этом и не выдаёт другой файл за установщик. `localhost` основного компьютера не является адресом для другого ПК. Сеть и брандмауэр автоматически не открываются.
+
+Фактические результаты сборки Windows и ограничения подписи описаны в [документации Windows-поставки](../../docs/windows-desktop-build.md). Наличие исходного кода не означает, что установщик прошёл проверку на физической Windows.
+
+## Разработка интерфейса
+
+Этот раздел предназначен разработчикам; пользователю desktop-поставки выполнять команды не требуется.
+
+При работающем API на `http://127.0.0.1:8000`, `PUBLIC_ORIGIN=http://localhost:3000` и `SESSION_SECURE=false` только для локальной разработки:
 
 ```sh
 npm ci --prefix apps/dashboard
 npm run dev --prefix apps/dashboard
 ```
 
-Open `http://localhost:3000`. Sign in using the initial administrator configured on the API. No seeded accounts or metrics are supplied by the UI. Empty and unavailable information is shown explicitly. Steam passwords and API secrets are never accepted by this client.
-
-`API_URL` selects the API upstream when Next configuration is built or the development server starts. Production Compose uses Caddy to forward `/api/*` and `/ws/*` directly to the API, retaining same-origin cookies and WebSockets. `NEXT_PUBLIC_WS_URL` may select a different WebSocket origin if that origin is explicitly permitted by the API. Default: current origin.
-
-## Production and checks
+Сборка и проверки:
 
 ```sh
 npm run typecheck --prefix apps/dashboard
@@ -24,7 +32,9 @@ npm audit --prefix apps/dashboard --omit=dev
 npm run start --prefix apps/dashboard
 ```
 
-Do not run `next build` and `next dev` against the same `.next` directory concurrently. The build emits standalone server files consumed by the dashboard Dockerfile.
+`API_URL` выбирает upstream при сборке Next или запуске development-сервера. Desktop-сборка использует `http://127.0.0.1:17831`; Next слушает `127.0.0.1:17830`. Переписываются `/api/*`, `/ws/*` и `/health/ready`. Серверный Compose сохраняет Caddy и same-origin маршрутизацию. `NEXT_PUBLIC_WS_URL` может выбрать другой разрешённый API сервером Origin; по умолчанию используется текущий Origin.
+
+Не запускайте `next build` и `next dev` одновременно с одной `.next`. Сборка создаёт standalone-сервер для контейнера или desktop-оболочки. Интерфейс не подставляет демонстрационные аккаунты или метрики и не принимает пароли Steam.
 
 ## Browser smoke test
 

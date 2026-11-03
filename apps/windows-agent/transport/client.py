@@ -11,11 +11,18 @@ from websockets.exceptions import ConnectionClosed, InvalidStatus
 log = logging.getLogger(__name__)
 
 
+def tls_context(config):
+    context = ssl.create_default_context()
+    if getattr(config, "ca_file", None):
+        context.load_verify_locations(cafile=config.ca_file)
+    return context
+
+
 async def enroll(config, token, hardware):
     import platform
     import socket
     from agent import __version__
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=30, verify=tls_context(config)) as client:
         response = await client.post(f"{config.server_url}/api/v1/nodes/enroll", json={
             "token": token, "hostname": socket.gethostname(), "os_version": platform.platform(),
             "hardware": hardware, "agent_version": __version__})
@@ -39,7 +46,7 @@ async def reconnecting(config, credentials, callback, stop_event):
     while not stop_event.is_set():
         try:
             async with connect(websocket_url(config), additional_headers={"Authorization": f"Bearer {credentials['credential']}"},
-                               open_timeout=20, ping_interval=20, ping_timeout=20, max_size=256 * 1024) as websocket:
+                               open_timeout=20, ping_interval=20, ping_timeout=20, max_size=256 * 1024, **({"ssl": tls_context(config)} if config.server_url.startswith("https://") else {})) as websocket:
                 log.info("Authenticated agent transport connected")
                 delay = 1.0
                 await callback(websocket)
