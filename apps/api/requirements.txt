@@ -1,0 +1,16 @@
+fastapi==0.162.0
+uvicorn[standard]==0.34.2
+SQLAlchemy==2.0.40
+alembic==1.15.2
+psycopg[binary]==3.2.9
+redis==5.2.1
+celery==5.5.2
+pydantic-settings==2.9.1
+argon2-cffi==23.1.0
+cryptography==50.0.2
+httpx==0.28.1
+python-multipart==0.0.33
+pytest==9.2.0
+pytest-asyncio==1.4.1.post1
+websockets==15.0.1
+psutil==7.0.0

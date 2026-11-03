@@ -1,0 +1,53 @@
+{
+  "environment": {
+    "python": "3.12.14",
+    "system": "Linux",
+    "machine": "x86_64",
+    "logical_cpus_visible": 3,
+    "database": "PostgreSQL 17.11 in Docker",
+    "redis": "Redis 7 in Docker",
+    "api": "single local Uvicorn process, host .venv",
+    "dataset": "synthetic isolated test records, no Steam requests",
+    "conditions": "shared development environment; not dedicated benchmark hardware"
+  },
+  "runs": [
+    {
+      "observed_at": "2026-11-03T06:40:44.493993+00:00",
+      "target": "http://127.0.0.1:8001",
+      "accounts_requested": 1000,
+      "import_response": {
+        "imported": 1000
+      },
+      "import_seconds": 1.0381000219999805,
+      "reads_requested": 200,
+      "concurrency": 8,
+      "successful_reads": 200,
+      "failed_reads": [],
+      "wall_seconds": 1.8904922919999763,
+      "reads_per_second": 105.79254982754647,
+      "latency_mean_seconds": 0.07480004786000052,
+      "latency_p95_seconds": 0.11818971200000306,
+      "scope": "Registry import and paginated reads only; excludes CS2 capacity, agent fanout and external Steam throughput.",
+      "imported_id_count": 1000
+    },
+    {
+      "observed_at": "2026-11-03T06:41:47.069810+00:00",
+      "target": "http://127.0.0.1:8001",
+      "accounts_requested": 5000,
+      "import_response": {
+        "imported": 5000
+      },
+      "imported_id_count": 5000,
+      "import_seconds": 5.77262946999997,
+      "reads_requested": 200,
+      "concurrency": 8,
+      "successful_reads": 200,
+      "failed_reads": [],
+      "wall_seconds": 2.9531548550000934,
+      "reads_per_second": 67.7241830584579,
+      "latency_mean_seconds": 0.11694487444999652,
+      "latency_p95_seconds": 0.18381777400009014,
+      "scope": "Registry import and paginated reads only; excludes CS2 capacity, agent fanout and external Steam throughput."
+    }
+  ]
+}

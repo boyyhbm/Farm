@@ -1,0 +1,15 @@
+{
+  "server_url": "https://farm.example.com",
+  "data_dir": "C:\\ProgramData\\CS2FarmAgent",
+  "heartbeat_seconds": 10,
+  "steam_path": "C:\\Program Files (x86)\\Steam\\steam.exe",
+  "cs2_path": "C:\\Program Files (x86)\\Steam\\steamapps\\common\\Counter-Strike Global Offensive\\game\\bin\\win64\\cs2.exe",
+  "test_capacity": 4,
+  "allow_insecure_localhost": false,
+  "update_public_key": null,
+  "allowed_update_host": null,
+  "log_level": "INFO",
+  "automatic_updates": false,
+  "update_manifest_url": null,
+  "update_check_seconds": 3600
+}

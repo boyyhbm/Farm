@@ -1,0 +1,110 @@
+name: cs2-farm-manager
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+x-api: &api
+  build:
+    context: .
+    dockerfile: infrastructure/docker/api.Dockerfile
+  image: cs2-farm-api:local
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+psycopg://farm:${POSTGRES_PASSWORD:?Run ./scripts/bootstrap.sh}@postgres:5432/farm
+    REDIS_URL: redis://redis:6379/0
+  restart: unless-stopped
+  logging: *logging
+  init: true
+  security_opt: ["no-new-privileges:true"]
+  depends_on:
+    postgres:
+      condition: service_healthy
+    redis:
+      condition: service_healthy
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: farm
+      POSTGRES_USER: farm
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run ./scripts/bootstrap.sh}
+    volumes: ["postgres_data:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U farm -d farm"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes: ["redis_data:/data"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    logging: *logging
+  api:
+    <<: *api
+    command: ["sh", "-ec", "alembic upgrade head; exec uvicorn app.main:app --host 0.0.0.0 --port 8000 --proxy-headers --forwarded-allow-ips='*'"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+  worker:
+    <<: *api
+    command: ["celery", "-A", "app.workers.tasks:celery_app", "worker", "--loglevel=INFO", "--queues=celery", "--concurrency=2"]
+    depends_on:
+      api:
+        condition: service_healthy
+  inventory:
+    <<: *api
+    command: ["celery", "-A", "app.workers.tasks:celery_app", "worker", "--loglevel=INFO", "--queues=inventory", "--concurrency=1", "--hostname=inventory@%h"]
+    depends_on:
+      api:
+        condition: service_healthy
+  scheduler:
+    <<: *api
+    command: ["celery", "-A", "app.workers.tasks:celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]
+    depends_on:
+      api:
+        condition: service_healthy
+  dashboard:
+    build:
+      context: .
+      dockerfile: infrastructure/docker/dashboard.Dockerfile
+    image: cs2-farm-dashboard:local
+    environment:
+      API_URL: http://api:8000
+      NODE_ENV: production
+    restart: unless-stopped
+    logging: *logging
+    security_opt: ["no-new-privileges:true"]
+    init: true
+    depends_on:
+      api:
+        condition: service_healthy
+  caddy:
+    image: caddy:2-alpine
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment:
+      SITE_ADDRESS: ${SITE_ADDRESS:-localhost}
+      TLS_EMAIL: ${TLS_EMAIL:-admin@localhost}
+    volumes:
+      - ./infrastructure/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    logging: *logging
+    depends_on: [api, dashboard]
+volumes:
+  postgres_data:
+  redis_data:
+  caddy_data:
+  caddy_config:

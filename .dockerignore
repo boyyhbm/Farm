@@ -1,0 +1,16 @@
+.git
+.env
+.env.*
+!.env.example
+**/node_modules
+**/.next
+**/__pycache__
+**/.pytest_cache
+**/.venv
+.venv
+backups
+artifacts
+*.sqlite*
+
+**/*.egg-info
+tests/e2e/artifacts

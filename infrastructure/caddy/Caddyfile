@@ -1,0 +1,25 @@
+{
+	email {$TLS_EMAIL:admin@localhost}
+	admin off
+}
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		X-Frame-Options "DENY"
+		-Server
+	}
+	@backend path /api/* /ws/* /health /health/* /healthz /docs /openapi.json /redoc
+	handle @backend {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy dashboard:3000
+	}
+	log {
+		output stdout
+		format json
+	}
+}

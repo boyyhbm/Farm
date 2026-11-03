@@ -1,0 +1,13 @@
+# Explicit local development override; never bind these ports to a public interface.
+services:
+  postgres:
+    ports: ["127.0.0.1:5432:5432"]
+  redis:
+    ports: ["127.0.0.1:6379:6379"]
+  api:
+    ports: ["127.0.0.1:8000:8000"]
+    environment:
+      SESSION_SECURE: "false"
+      PUBLIC_ORIGIN: http://localhost:3000
+  dashboard:
+    ports: ["127.0.0.1:3000:3000"]

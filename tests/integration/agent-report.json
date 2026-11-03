@@ -1,0 +1,57 @@
+{
+  "executed_at": "2026-11-03T06:48:00.863620+00:00",
+  "environment": "Linux, two real Python agents on one host; synthetic gameplay only",
+  "checks": [
+    {
+      "name": "two_real_agents_online_with_telemetry",
+      "passed": true
+    },
+    {
+      "name": "queue_paused_retains_jobs",
+      "passed": true
+    },
+    {
+      "name": "two_nodes_parallel_third_queued",
+      "passed": true,
+      "observed": {
+        "2e3649f8-d62d-4dd7-b38f-0aa8ddff7568": "QUEUED",
+        "583927e1-a06f-4348-8f9e-00319864a696": "RUNNING",
+        "0c0975be-bd51-47a3-b9bb-c610ef568e8c": "RUNNING"
+      }
+    },
+    {
+      "name": "parallel_then_sequential_queue_completed",
+      "passed": true
+    },
+    {
+      "name": "cancel_stops_owned_real_process",
+      "passed": true
+    },
+    {
+      "name": "disconnected_agent_job_becomes_unknown",
+      "passed": true,
+      "elapsed_seconds": 49.05
+    },
+    {
+      "name": "reconnect_reconciles_existing_owned_process",
+      "passed": true
+    },
+    {
+      "name": "stop_after_reconnect",
+      "passed": true
+    }
+  ],
+  "node_ids": [
+    "c2546434-9b34-4944-ba65-ba6000f45d32",
+    "5a984a6e-8090-4064-bb87-892c73316355"
+  ],
+  "job_ids": [
+    "0c0975be-bd51-47a3-b9bb-c610ef568e8c",
+    "583927e1-a06f-4348-8f9e-00319864a696",
+    "2e3649f8-d62d-4dd7-b38f-0aa8ddff7568",
+    "13d9b8d2-2180-4174-b634-168157fd9a35",
+    "ef8c65bf-6b23-4245-ba64-acbafc66d84e"
+  ],
+  "passed": true,
+  "duration_seconds": 91.83
+}
