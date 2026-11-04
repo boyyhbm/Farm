@@ -175,7 +175,12 @@ class ProcessManager:
                 continue
             handle = self.handles.get(session_id)
             exit_code = handle.poll() if handle else None
-            if self.owned(record) and exit_code is None:
+            # The saved OS handle is authoritative. A short-lived process can exit
+            # between poll() and a psutil PID lookup; wait for the next handle poll
+            # rather than reporting an unknown failure and discarding its exit code.
+            if handle is not None and exit_code is None:
+                continue
+            if handle is None and self.owned(record):
                 continue
             event = {"type": "ack", "command_id": record["command_id"], "pid": record["pid"],
                      "status": "STOPPED" if exit_code == 0 else "FAILED", "exit_code": exit_code,

@@ -54,7 +54,7 @@ async def test_real_child_launch_replay_and_completion(tmp_path):
         if results:
             break
     assert len(results) == 1
-    assert results[0]["status"] == "STOPPED", results
+    assert results[0]["status"] == "STOPPED", json.dumps(results, ensure_ascii=False)
     assert results[0]["resource_usage"]["synthetic"] is True
     assert results[0]["resource_usage"]["steps"] > 0
     replay = await agent.command(request)
@@ -234,3 +234,27 @@ async def test_local_shutdown_persists_interrupted_result_instead_of_replaying_r
         assert reopened.processes() == []
     finally:
         reopened.close()
+
+
+def test_live_handle_is_authoritative_when_pid_disappears_between_polls(
+    tmp_path, monkeypatch
+):
+    store = Store(tmp_path / "race-journal.sqlite3")
+    store.reserve("race-command", "explicit-fingerprint")
+    store.add_process("race-session", "race-command", "test", 777, 0)
+    manager = ProcessManager(config(tmp_path), store)
+
+    class SavedHandle:
+        def __init__(self):
+            self.calls = 0
+
+        def poll(self):
+            self.calls += 1
+            return None if self.calls == 1 else 0
+
+    manager.handles["race-session"] = SavedHandle()
+    monkeypatch.setattr(manager, "owned", lambda _: None)
+    assert manager.poll() == [] and len(store.processes()) == 1
+    result = manager.poll()
+    assert result[0]["status"] == "STOPPED" and result[0]["exit_code"] == 0
+    store.close()
