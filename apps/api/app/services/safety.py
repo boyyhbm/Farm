@@ -616,11 +616,22 @@ def validate_metrics(raw):
 def _inspect_manager(db, force=False):
     from pathlib import Path
 
-    previous = db.scalar(
-        select(IntegrityCheck)
-        .where(IntegrityCheck.node_id.is_(None))
-        .order_by(IntegrityCheck.checked_at.desc())
-        .limit(1)
+    engine = db.scalar(
+        select(ProtectionEngineState)
+        .where(ProtectionEngineState.id == 1)
+        .with_for_update()
+    )
+    if engine is None:
+        engine = ProtectionEngineState(id=1)
+        db.add(engine)
+        db.flush()
+    if db.bind.dialect.name == "sqlite":
+        db.execute(text("UPDATE protection_engine_state SET id=id WHERE id=1"))
+        db.refresh(engine)
+    previous = (
+        db.get(IntegrityCheck, engine.last_manager_check_id)
+        if engine.last_manager_check_id
+        else None
     )
     if (
         not force
@@ -727,6 +738,7 @@ def _inspect_manager(db, force=False):
     )
     db.add(row)
     db.flush()
+    engine.last_manager_check_id = row.id
     return row
 
 
@@ -772,12 +784,16 @@ def inspect_manager(db, force=False):
     return row
 
 
-def assert_manager_allowed(db):
-    latest = db.scalar(
-        select(IntegrityCheck)
-        .where(IntegrityCheck.node_id.is_(None))
-        .order_by(IntegrityCheck.checked_at.desc())
-        .limit(1)
+def latest_manager_check(db):
+    engine = db.get(ProtectionEngineState, 1)
+    return (
+        db.get(IntegrityCheck, engine.last_manager_check_id)
+        if engine and engine.last_manager_check_id
+        else None
     )
+
+
+def assert_manager_allowed(db):
+    latest = latest_manager_check(db)
     if latest and latest.status == "FAILED":
         raise ProtectionDenied("MANAGER_COMPONENT_INTEGRITY_FAILED")

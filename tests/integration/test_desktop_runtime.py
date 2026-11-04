@@ -95,7 +95,7 @@ command.downgrade(config, '0002')
     with closing(sqlite3.connect(data / "farm.sqlite3")) as db:
         assert (
             db.execute("SELECT version_num FROM alembic_version").fetchone()[0]
-            == "0004"
+            == "0005"
         )
         assert db.execute("SELECT steam_id, notes FROM steam_accounts").fetchone() == (
             "76561198000000001",

@@ -421,6 +421,8 @@ def test_manager_corruption_keeps_queue_paused_until_fresh_repair_check(
     monkeypatch.setattr(
         safety, "__file__", str(root / "app" / "services" / "safety.py")
     )
+    fixed_time = utcnow()
+    monkeypatch.setattr(safety, "utcnow", lambda: fixed_time)
     initial = safety.inspect_manager(db, force=True)
     db.commit()
     assert initial.status == "WARNING"
@@ -428,6 +430,7 @@ def test_manager_corruption_keeps_queue_paused_until_fresh_repair_check(
     failed = safety.inspect_manager(db, force=True)
     db.commit()
     assert failed.status == "FAILED" and db.get(Control, 1).paused
+    assert initial.checked_at == failed.checked_at
     with pytest.raises(ProtectionDenied):
         safety.assert_manager_allowed(db)
     db.get(Control, 1).paused = False
@@ -594,3 +597,30 @@ def test_corrupt_protected_credentials_do_not_disable_safety_logging_or_invent_b
     )
     assert "ciphertext" not in (protection.key_error() or "")
     assert protection.get_risk(db, a.id).vac_banned is None
+
+
+@pytest.mark.asyncio
+async def test_local_sensor_failure_reports_unknown_metrics_and_keeps_guard_alive(
+    tmp_path, monkeypatch
+):
+    import asyncio
+
+    from agent.config import Config
+    from agent.main import Agent
+
+    stopping = asyncio.Event()
+
+    async def unavailable(_):
+        stopping.set()
+        raise OSError("Explicit test sensor failure")
+
+    monkeypatch.setattr("collectors.metrics.collect", unavailable)
+    agent = Agent(
+        Config(server_url="https://explicit-test.invalid", data_dir=tmp_path), {}
+    )
+    try:
+        await agent.safety.run(stopping)
+        assert agent.safety.metrics == {} and agent.safety.evidence()["held"]
+        assert agent.safety.reasons == ["LOCAL_MONITOR_FAILED"]
+    finally:
+        agent.store.close()

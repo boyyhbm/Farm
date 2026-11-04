@@ -586,6 +586,7 @@ class SafetyDecision(Identified, Created, Base):
 class ProtectionEngineState(Base):
     __tablename__ = "protection_engine_state"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    last_manager_check_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
     last_cycle_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )

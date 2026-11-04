@@ -15,7 +15,7 @@ from pathlib import Path
 from agent import __version__
 from agent.config import Config
 from agent.store import Store
-from collectors.metrics import collect, hardware
+from collectors.metrics import hardware
 from process_manager.manager import ProcessManager
 from security.credentials import read_credentials, write_credentials, restrict_path
 from transport.client import enroll, reconnecting
@@ -261,7 +261,7 @@ class Agent:
                     {
                         "type": "heartbeat",
                         "agent_version": __version__,
-                        "metrics": self.safety.metrics or await collect(self.config),
+                        "metrics": self.safety.metrics,
                         "safety": self.safety.evidence(),
                         "integrity": self.safety.integrity,
                         "processes": self.processes.running(),

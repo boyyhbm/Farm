@@ -74,12 +74,7 @@ def status(user=Depends(authenticate), db=Depends(get_db)):
             NodeSafety.state.in_(("REVIEW_REQUIRED", "RELEASING"))
         )
     )
-    latest = db.scalar(
-        select(IntegrityCheck)
-        .where(IntegrityCheck.node_id.is_(None))
-        .order_by(IntegrityCheck.checked_at.desc())
-        .limit(1)
-    )
+    latest = safety.latest_manager_check(db)
     return {
         "version": "2.0",
         "service": {
@@ -108,6 +103,13 @@ def status(user=Depends(authenticate), db=Depends(get_db)):
 @router.post("/safety/check-manager")
 def check_manager(data: Confirm, user=Depends(admin), db=Depends(get_db)):
     confirm(data)
+    if db.bind.dialect.name == "postgresql":
+        from sqlalchemy import text
+
+        if not db.scalar(text("SELECT pg_try_advisory_xact_lock(73294021)")):
+            raise HTTPException(
+                409, "Safety cycle is in progress; retry the integrity check shortly"
+            )
     result = safety.inspect_manager(db, force=True)
     audit(
         db,

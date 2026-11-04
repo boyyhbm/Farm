@@ -4,10 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from security.credentials import restrict_path
+
+log = logging.getLogger("farm-agent.safety")
 
 ALLOWED_REASONS = {
     "OVERHEATING",
@@ -177,14 +180,20 @@ class LocalSafetyGuard:
                     await self.check_integrity()
                     next_integrity = now + 300
                 await self.sample()
-            except Exception:  # noqa: BLE001 - a monitor failure must fail closed and preserve the hold
+            except Exception as exc:  # noqa: BLE001 - a monitor failure must fail closed and preserve the hold
+                log.error("Local safety monitor failed (%s)", type(exc).__name__)
                 # A failed guard cannot silently permit new managed work.
                 self.reasons = sorted(set(self.reasons) | {"LOCAL_MONITOR_FAILED"})
+                self.observed_at = datetime.now(UTC).isoformat()
+                self.metrics = {}
                 try:
                     self.save()
                     await self.stop_owned()
-                except OSError:
-                    pass
+                except Exception as stop_error:  # noqa: BLE001 - keep the guard alive and held when a local stop or storage operation fails
+                    log.error(
+                        "Local safety stop or persistence failed (%s)",
+                        type(stop_error).__name__,
+                    )
             try:
                 await asyncio.wait_for(stopping.wait(), 5)
             except TimeoutError:

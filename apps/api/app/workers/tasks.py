@@ -152,10 +152,32 @@ def retention():
                 RiskIncident.resolved_at < utcnow() - timedelta(days=365),
             )
         )
-        from app.models.models import IntegrityCheck, SafetyDecision, NodeSafety
-        db.execute(delete(SafetyDecision).where(SafetyDecision.created_at < utcnow()-timedelta(days=365)))
-        current_integrity=select(NodeSafety.last_integrity_id).where(NodeSafety.last_integrity_id.is_not(None))
-        db.execute(delete(IntegrityCheck).where(IntegrityCheck.received_at < utcnow()-timedelta(days=365),IntegrityCheck.id.not_in(current_integrity)))
+        from app.models.models import (
+            IntegrityCheck,
+            SafetyDecision,
+            NodeSafety,
+            ProtectionEngineState,
+        )
+
+        db.execute(
+            delete(SafetyDecision).where(
+                SafetyDecision.created_at < utcnow() - timedelta(days=365)
+            )
+        )
+        current_integrity = select(NodeSafety.last_integrity_id).where(
+            NodeSafety.last_integrity_id.is_not(None)
+        )
+        db.execute(
+            delete(IntegrityCheck).where(
+                IntegrityCheck.received_at < utcnow() - timedelta(days=365),
+                IntegrityCheck.id.not_in(current_integrity),
+                IntegrityCheck.id.not_in(
+                    select(ProtectionEngineState.last_manager_check_id).where(
+                        ProtectionEngineState.last_manager_check_id.is_not(None)
+                    )
+                ),
+            )
+        )
         db.commit()
 
 
@@ -204,7 +226,8 @@ def protection_check(self, account_ids=None):
 @celery_app.task(name="farm.safety_cycle", autoretry_for=(), acks_late=True)
 def safety_cycle():
     from app.services.safety import cycle
+
     with SessionLocal() as db:
-        result=cycle(db)
+        result = cycle(db)
         db.commit()
         return result
