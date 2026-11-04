@@ -178,6 +178,20 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 creationflags=subprocess.CREATE_NO_WINDOW,
             )
 
+        def stop_server(process):
+            if process.stdin and not process.stdin.closed:
+                process.stdin.write(b"shutdown\n")
+                process.stdin.flush()
+                process.stdin.close()  # same private-pipe EOF as Electron supervisor
+            try:
+                process.wait(timeout=25)
+            except subprocess.TimeoutExpired:
+                print(
+                    "BUNDLED SERVER SHUTDOWN LOG:",
+                    (tmp_path / "server.log").read_text(errors="replace")[-6000:],
+                )
+                raise
+
         server = launch_server()
         with httpx.Client(
             base_url=network["url"],
@@ -362,9 +376,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
             wait_value(lambda: job(blocked), lambda j: j["status"] == "COMPLETED")
             print("WINDOWS_CHECK UNKNOWN and reconciliation after heartbeat loss")
             # Both services reconnect after the actual bundled backend is stopped/restarted.
-            server.stdin.write(b"shutdown\n")
-            server.stdin.flush()
-            server.wait(timeout=25)
+            stop_server(server)
             server = launch_server()
             wait_value(ready, lambda code: code == 200)
             for node_id in node_ids:
@@ -424,10 +436,8 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 cleanup_errors.append(name + ": " + str(exc))
                 print("SCM cleanup failed for " + name + ": " + str(exc))
         if server and server.poll() is None:
-            server.stdin.write(b"shutdown\n")
-            server.stdin.flush()
             try:
-                server.wait(timeout=25)
+                stop_server(server)
             except subprocess.TimeoutExpired:
                 server.kill()
                 server.wait(timeout=5)
