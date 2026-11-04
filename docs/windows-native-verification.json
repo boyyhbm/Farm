@@ -1,73 +1,94 @@
 {
   "checked_at": "2026-11-04",
+  "version": "0.3.0",
+  "source_commit": "d71402bd34569fe4dd2e5b1db44c1cfba58baa1e",
   "windows_ci": {
-    "run_id": 41759035951,
-    "url": "https://github.com/boyyhbm/Farm/actions/runs/41759035951",
+    "run_id": 41892308025,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41892308025",
+    "status": "completed",
     "conclusion": "success",
-    "source_commit": "1350bad7be31898e4757c2b36a51b4973bbe8b73",
     "os": "Windows Server 2022 x64",
-    "immutable_installer_bytes": true,
     "source_overlay": false,
     "python": {
-      "passed": 74,
+      "passed": 93,
       "skipped": 1,
-      "duration_seconds": 49.73,
+      "duration_seconds": 52.456,
       "skip_reason": "non-Windows platform rejection contract"
     },
     "desktop_node": {
       "passed": 13,
       "failed": 0
     },
-    "installed_scm_integration": {
-      "passed": 1,
-      "skipped": 0,
-      "duration_seconds": 170.46
+    "installer_checks": {
+      "passed": 22,
+      "failed": 0
     },
-    "installer_checks_passed": 22
+    "manager_checks": {
+      "passed": 8,
+      "failed": 0,
+      "protection_api_and_page": true
+    },
+    "two_scm_agents": {
+      "scenarios_passed": 1,
+      "skipped": 0,
+      "duration_seconds": 184.452,
+      "physical_hosts": 1,
+      "service_instances": 2,
+      "tls_and_telemetry": true,
+      "parallel_tasks_stop_rotation_offline_unknown_recovery": true
+    }
   },
   "local_inspection": {
-    "windows_executed_here": false,
-    "description": "Streaming PE/NSIS structure, declared length, complete CRC and exact comparison to native build SHA256"
+    "downloaded_exact_native_bytes": true,
+    "sha256_matches_native_manifest": true,
+    "nsis_crc_and_pe_valid": true,
+    "windows_executed_here": false
   },
   "artifacts": [
     {
       "filename": "CS2-Farm-Manager-Setup.exe",
-      "size_bytes": 447800251,
-      "sha256": "88fd587f1deeac34913e8e0edb0d3568ccccb14e1f010ebd438e8631d5a09cc1",
+      "size_bytes": 447856754,
+      "sha256": "ed72de71fe86b59b42f25041f11f0f50ef1ceb7401a96ca7bb77d0c8989c1033",
       "pe_machine": "0x14c",
       "nsis_container": true,
       "crc32_valid": true,
       "length_valid": true,
-      "authenticode_certificate_table_present": false
+      "authenticode": "unsigned",
+      "windows_executed": false
     },
     {
       "filename": "CS2-Farm-Agent-Setup.exe",
-      "size_bytes": 204222807,
-      "sha256": "d52dd5851e5b655446a193c63c799e7a5df4a871eeff02e8154c0b9fa5c8113c",
+      "size_bytes": 204238876,
+      "sha256": "05595fbec4cacb21ece7fb47171f3e5be919de68227f8d709748a03aa17e281f",
       "pe_machine": "0x14c",
       "nsis_container": true,
       "crc32_valid": true,
       "length_valid": true,
-      "authenticode_certificate_table_present": false
+      "authenticode": "unsigned",
+      "windows_executed": false
     }
   ],
   "native_signatures": {
-    "CS2-Farm-Agent-Setup.exe": {
+    "CS2-Farm-Manager-Setup.exe": {
       "status": "NotSigned",
       "signer": null
     },
-    "CS2-Farm-Manager-Setup.exe": {
+    "CS2-Farm-Agent-Setup.exe": {
       "status": "NotSigned",
       "signer": null
     }
   },
+  "release": {
+    "draft": true,
+    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-225b7c9a14d04c106e54",
+    "export_workflow": "https://github.com/boyyhbm/Farm/actions/runs/41894710135"
+  },
   "unverified": [
-    "clean Windows 11 without preinstalled development runtimes",
-    "two physical additional Windows PCs",
-    "real OS reboot and before-login recovery",
-    "interactive UAC/SmartScreen and signing reputation",
-    "visual absence of console windows",
-    "upgrade from a distinct released schema version",
-    "interactive Steam/CS2 and physical GPU/temperature sensors"
+    "Clean Windows 11/10 installation and interactive UAC/SmartScreen",
+    "Actual OS reboot",
+    "Two physical additional Windows PCs",
+    "Upgrade from an earlier EXE version (schema upgrade and same-version reinstall checked separately)",
+    "Live Steam GetPlayerBans with an administrator API key",
+    "Telegram delivery to an administrator chat"
   ]
 }

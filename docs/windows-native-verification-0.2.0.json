@@ -1,0 +1,73 @@
+{
+  "checked_at": "2026-11-04",
+  "windows_ci": {
+    "run_id": 41759035951,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41759035951",
+    "conclusion": "success",
+    "source_commit": "1350bad7be31898e4757c2b36a51b4973bbe8b73",
+    "os": "Windows Server 2022 x64",
+    "immutable_installer_bytes": true,
+    "source_overlay": false,
+    "python": {
+      "passed": 74,
+      "skipped": 1,
+      "duration_seconds": 49.73,
+      "skip_reason": "non-Windows platform rejection contract"
+    },
+    "desktop_node": {
+      "passed": 13,
+      "failed": 0
+    },
+    "installed_scm_integration": {
+      "passed": 1,
+      "skipped": 0,
+      "duration_seconds": 170.46
+    },
+    "installer_checks_passed": 22
+  },
+  "local_inspection": {
+    "windows_executed_here": false,
+    "description": "Streaming PE/NSIS structure, declared length, complete CRC and exact comparison to native build SHA256"
+  },
+  "artifacts": [
+    {
+      "filename": "CS2-Farm-Manager-Setup.exe",
+      "size_bytes": 447800251,
+      "sha256": "88fd587f1deeac34913e8e0edb0d3568ccccb14e1f010ebd438e8631d5a09cc1",
+      "pe_machine": "0x14c",
+      "nsis_container": true,
+      "crc32_valid": true,
+      "length_valid": true,
+      "authenticode_certificate_table_present": false
+    },
+    {
+      "filename": "CS2-Farm-Agent-Setup.exe",
+      "size_bytes": 204222807,
+      "sha256": "d52dd5851e5b655446a193c63c799e7a5df4a871eeff02e8154c0b9fa5c8113c",
+      "pe_machine": "0x14c",
+      "nsis_container": true,
+      "crc32_valid": true,
+      "length_valid": true,
+      "authenticode_certificate_table_present": false
+    }
+  ],
+  "native_signatures": {
+    "CS2-Farm-Agent-Setup.exe": {
+      "status": "NotSigned",
+      "signer": null
+    },
+    "CS2-Farm-Manager-Setup.exe": {
+      "status": "NotSigned",
+      "signer": null
+    }
+  },
+  "unverified": [
+    "clean Windows 11 without preinstalled development runtimes",
+    "two physical additional Windows PCs",
+    "real OS reboot and before-login recovery",
+    "interactive UAC/SmartScreen and signing reputation",
+    "visual absence of console windows",
+    "upgrade from a distinct released schema version",
+    "interactive Steam/CS2 and physical GPU/temperature sensors"
+  ]
+}
