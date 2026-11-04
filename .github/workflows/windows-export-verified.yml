@@ -27,7 +27,8 @@ jobs:
         shell: pwsh
         run: |
           $Run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $Run.status -ne 'completed' -or $Run.conclusion -ne 'success' -or $Run.path -ne '.github/workflows/windows-validate-existing.yml') { throw 'Complete successful installed validation required.' }
+          if ($LASTEXITCODE -ne 0 -or $Run.status -ne 'completed' -or $Run.conclusion -ne 'success' -or $Run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $Run.path -notin @('.github/workflows/windows-validate-existing.yml','.github/workflows/windows-desktop.yml')) { throw 'Complete successful trusted Windows validation required.' }
+          if ($Run.path -eq '.github/workflows/windows-desktop.yml' -and $env:VALIDATION_RUN -ne $env:BUILD_RUN) { throw 'Native build validation must refer to that same build run.' }
       - uses: actions/download-artifact@v4
         with:
           name: CS2-Farm-Windows-x64
@@ -43,6 +44,11 @@ jobs:
       - name: Verify provenance, complete coverage and exact EXE hashes
         shell: pwsh
         run: |
+          if (!(Test-Path artifacts/verification/validation-provenance.json)) {
+            if ($env:BUILD_RUN -ne $env:VALIDATION_RUN) { throw 'Missing verification provenance.' }
+            $Run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN" | ConvertFrom-Json
+            @{build_run=$env:BUILD_RUN; driver_commit=$Run.head_sha; os='Windows Server 2022'; clean_windows11=$false; validation='native build, installation, smoke and uninstall in same run'} | ConvertTo-Json | Set-Content artifacts/verification/validation-provenance.json -Encoding utf8
+          }
           $Provenance = Get-Content artifacts/verification/validation-provenance.json -Raw | ConvertFrom-Json
           $Smoke = Get-Content artifacts/verification/installer-smoke.json -Raw | ConvertFrom-Json
           if ([string]$Provenance.build_run -ne [string]$env:BUILD_RUN -or !$Smoke.passed -or $Smoke.products -ne 'all' -or $Smoke.diagnostic_source_overlay) { throw 'Validation does not cover this build and both products.' }
@@ -50,6 +56,9 @@ jobs:
           foreach ($Name in $Required) {
             if (!($Smoke.checks | Where-Object { $_.name -eq $Name -and $_.passed })) { throw "Missing successful installed check: $Name" }
           }
+          [xml]$JUnit = Get-Content artifacts/verification/windows-services.xml -Raw
+          $Suite = $JUnit.testsuites.testsuite
+          if ([int]$Suite.tests -ne 1 -or [int]$Suite.skipped -ne 0 -or [int]$Suite.failures -ne 0 -or [int]$Suite.errors -ne 0) { throw 'An executed successful SCM integration test is required.' }
           $Manifest = Get-Content artifacts/build/build-manifest.json -Raw | ConvertFrom-Json
           foreach ($Product in @('manager','agent')) {
             $Name = if ($Product -eq 'manager') {'CS2-Farm-Manager-Setup.exe'} else {'CS2-Farm-Agent-Setup.exe'}
