@@ -59,6 +59,11 @@ jobs:
         env:
           PYTHONPATH: apps/api;apps/windows-agent;packages/gameplay-test-engine
         run: python -m pytest tests/unit tests/integration/test_desktop_runtime.py -q --junitxml=artifacts/windows/verification/python-tests.xml
+      - name: Desktop unit tests
+        shell: pwsh
+        run: |
+          npm test --prefix apps/desktop 2>&1 | Tee-Object artifacts/windows/verification/desktop-unit.log
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop unit tests failed' }
       - name: Native build, bundled runtimes and NSIS installers
         shell: pwsh
         env:
@@ -70,11 +75,6 @@ jobs:
           } else {
             python scripts/build-windows-cross.py
           }
-      - name: Desktop unit tests
-        shell: pwsh
-        run: |
-          npm test --prefix apps/desktop 2>&1 | Tee-Object artifacts/windows/verification/desktop-unit.log
-          if ($LASTEXITCODE -ne 0) { throw 'Desktop unit tests failed' }
       - name: Install, exercise actual bundled application, uninstall
         shell: pwsh
         run: ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification"

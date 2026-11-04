@@ -1,0 +1,62 @@
+name: Windows installed application validation
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Completed Windows build run containing CS2-Farm-Windows-x64 artifact
+        required: true
+        type: string
+permissions:
+  contents: read
+  actions: read
+jobs:
+  validate-installers:
+    runs-on: windows-2022
+    timeout-minutes: 30
+    env:
+      PYTHONUTF8: '1'
+      NEXT_TELEMETRY_DISABLED: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+      - name: Install validation driver dependencies
+        run: python -m pip install --require-hashes -r build/windows/requirements.lock
+      - uses: actions/download-artifact@v4
+        with:
+          name: CS2-Farm-Windows-x64
+          path: artifacts/windows
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+      - name: Verify original build bytes and record provenance
+        shell: pwsh
+        env:
+          BUILD_RUN_ID: ${{ inputs.build_run_id }}
+        run: |
+          $Manifest = Get-Content artifacts/windows/build-manifest.json -Raw | ConvertFrom-Json
+          foreach ($Product in @('agent','manager')) {
+            $Name = if ($Product -eq 'agent') {'CS2-Farm-Agent-Setup.exe'} else {'CS2-Farm-Manager-Setup.exe'}
+            $Expected = $Manifest.artifacts.$Name.sha256
+            $Actual = (Get-FileHash "artifacts/windows/$Product/$Name" -Algorithm SHA256).Hash.ToLowerInvariant()
+            if ($Actual -ne $Expected) { throw "Original build SHA256 differs: $Name" }
+          }
+          New-Item -ItemType Directory -Force artifacts/windows/verification | Out-Null
+          @{build_run=$env:BUILD_RUN_ID; driver_commit=$env:GITHUB_SHA; os=[Environment]::OSVersion.VersionString; clean_windows11=$false} | ConvertTo-Json | Set-Content artifacts/windows/verification/validation-provenance.json -Encoding utf8
+      - name: Desktop unit tests on Windows
+        shell: pwsh
+        run: |
+          npm test --prefix apps/desktop 2>&1 | Tee-Object artifacts/windows/verification/desktop-unit.log
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop unit tests failed' }
+      - name: Install, start bundled components, validate two SCM agents and uninstall
+        shell: pwsh
+        run: ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Windows-verification
+          retention-days: 30
+          path: artifacts/windows/verification/**

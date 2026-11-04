@@ -9,10 +9,10 @@ const { Supervisor, assertPortFree, resolvePaths } = require('../lib/supervisor.
 
 test('packaged paths use bundled interpreters and runtime, no PATH dependencies', () => {
   const value = resolvePaths({ packaged: true, resourcesPath: 'C:/program/resources', repositoryRoot: '/ignored', dataDir: '/data' });
-  assert.ok(value.runtime.endsWith('runtime/farm-runtime/farm-runtime.exe'));
-  assert.ok(value.node.endsWith('node/node.exe'));
+  assert.ok(value.runtime.endsWith(path.join('runtime', 'farm-runtime', 'farm-runtime.exe')));
+  assert.ok(value.node.endsWith(path.join('node', 'node.exe')));
   assert.deepEqual(value.runtimePrefix, []);
-  assert.ok(value.agentInstaller.endsWith('downloads/CS2-Farm-Agent-Setup.exe'));
+  assert.ok(value.agentInstaller.endsWith(path.join('downloads', 'CS2-Farm-Agent-Setup.exe')));
 });
 test('occupied ports are rejected rather than attaching to unrelated local process', async () => {
   const server = net.createServer(); await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
