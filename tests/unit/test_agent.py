@@ -24,15 +24,24 @@ def config(tmp_path):
 
 
 def command(operation="start", **extra):
-    return {"type": "command", "command_id": "command-1", "operation": operation,
-            "session_id": "session-1", "kind": "test", "payload": {"duration_seconds": 0.1},
-            "deadline": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(), **extra}
+    return {
+        "type": "command",
+        "command_id": "command-1",
+        "operation": operation,
+        "session_id": "session-1",
+        "kind": "test",
+        "payload": {"duration_seconds": 0.1},
+        "deadline": (datetime.now(timezone.utc) + timedelta(minutes=5)).isoformat(),
+        **extra,
+    }
 
 
 @pytest.mark.asyncio
 async def test_real_child_launch_replay_and_completion(tmp_path):
     agent = Agent(config(tmp_path), {"node_id": "n", "credential": "secret"})
-    request = command(payload={"duration_seconds": 0.1, "min_ram_gb": 0, "max_cpu_percent": 95})
+    request = command(
+        payload={"duration_seconds": 0.1, "min_ram_gb": 0, "max_cpu_percent": 95}
+    )
     first = await agent.command(request)
     second = await agent.command(request)
     assert first["status"] == "RUNNING"
@@ -69,13 +78,17 @@ async def test_real_child_stop_is_idempotent(tmp_path):
 @pytest.mark.asyncio
 async def test_command_expiry_allowlist_and_mutated_replay(tmp_path):
     agent = Agent(config(tmp_path), {})
-    expired = command(deadline=(datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat())
+    expired = command(
+        deadline=(datetime.now(timezone.utc) - timedelta(seconds=1)).isoformat()
+    )
     assert (await agent.command(expired))["status"] == "FAILED"
     with pytest.raises(ValueError, match="reused"):
         await agent.command(command())
     bad = command(command_id="bad-kind", kind="shell", payload={"command": "whoami"})
     assert (await agent.command(bad))["status"] == "FAILED"
-    injected = command(command_id="injected", payload={"duration_seconds": 1, "executable": "cmd.exe"})
+    injected = command(
+        command_id="injected", payload={"duration_seconds": 1, "executable": "cmd.exe"}
+    )
     assert (await agent.command(injected))["status"] == "FAILED"
     assert not agent.processes.running()
     agent.store.close()
@@ -94,15 +107,28 @@ def test_durable_journal_survives_reopen(tmp_path):
 
 def test_pid_reuse_does_not_own_unrelated_process(tmp_path):
     import psutil
+
     proc = psutil.Process()
-    assert ProcessManager.owned({"pid": proc.pid, "created": proc.create_time() - 5}) is None
-    assert ProcessManager.owned({"pid": proc.pid, "created": proc.create_time()}).pid == proc.pid
+    assert (
+        ProcessManager.owned({"pid": proc.pid, "created": proc.create_time() - 5})
+        is None
+    )
+    assert (
+        ProcessManager.owned({"pid": proc.pid, "created": proc.create_time()}).pid
+        == proc.pid
+    )
 
 
 def test_signed_update_verifies_integrity():
     private = Ed25519PrivateKey.generate()
-    public = base64.b64encode(private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)).decode()
-    manifest = {"version": "1.0.0", "url": "https://updates.example.com/1.zip", "sha256": "a" * 64}
+    public = base64.b64encode(
+        private.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
+    ).decode()
+    manifest = {
+        "version": "1.0.0",
+        "url": "https://updates.example.com/1.zip",
+        "sha256": "a" * 64,
+    }
     canonical = json.dumps(manifest, sort_keys=True, separators=(",", ":")).encode()
     manifest["signature"] = base64.b64encode(private.sign(canonical)).decode()
     assert verify_manifest(manifest, public) == canonical
@@ -137,10 +163,20 @@ def test_credentials_roundtrip_and_local_permissions(tmp_path):
 
 def test_configuration_requires_tls(tmp_path):
     path = tmp_path / "config.json"
-    path.write_text(json.dumps({"server_url": "http://example.com", "data_dir": str(tmp_path)}))
+    path.write_text(
+        json.dumps({"server_url": "http://example.com", "data_dir": str(tmp_path)})
+    )
     with pytest.raises(ValueError, match="HTTPS"):
         Config.load(str(path))
-    path.write_text(json.dumps({"server_url": "http://127.0.0.1:8000", "data_dir": str(tmp_path), "allow_insecure_localhost": True}))
+    path.write_text(
+        json.dumps(
+            {
+                "server_url": "http://127.0.0.1:8000",
+                "data_dir": str(tmp_path),
+                "allow_insecure_localhost": True,
+            }
+        )
+    )
     assert Config.load(str(path)).server_url == "http://127.0.0.1:8000"
 
 
@@ -162,7 +198,9 @@ async def test_stop_does_not_race_completion_telemetry(tmp_path):
 @pytest.mark.asyncio
 async def test_pruned_expired_command_cannot_relaunch(tmp_path):
     agent = Agent(config(tmp_path), {})
-    request = command(deadline=(datetime.now(timezone.utc) - timedelta(days=31)).isoformat())
+    request = command(
+        deadline=(datetime.now(timezone.utc) - timedelta(days=31)).isoformat()
+    )
     assert (await agent.command(request))["status"] == "FAILED"
     agent.store.db.execute("UPDATE commands SET created=0")
     agent.store.db.commit()
@@ -171,3 +209,28 @@ async def test_pruned_expired_command_cannot_relaunch(tmp_path):
     assert (await agent.command(request))["status"] == "FAILED"
     assert not agent.processes.running()
     agent.store.close()
+
+
+@pytest.mark.asyncio
+async def test_local_shutdown_persists_interrupted_result_instead_of_replaying_running(
+    tmp_path, monkeypatch
+):
+    agent = Agent(config(tmp_path), {})
+    started = await agent.command(command(payload={"duration_seconds": 60}))
+    assert started["status"] == "RUNNING"
+
+    async def stopped_transport(*args):
+        return None
+
+    monkeypatch.setattr("agent.main.reconnecting", stopped_transport)
+    assert await agent.run() == 0
+    reopened = Store(tmp_path / "journal.sqlite3")
+    try:
+        ack = next(
+            item for item in reopened.latest_acks() if item["command_id"] == "command-1"
+        )
+        assert ack["status"] == "FAILED"
+        assert "stopped locally" in ack["error"]
+        assert reopened.processes() == []
+    finally:
+        reopened.close()

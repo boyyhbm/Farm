@@ -186,8 +186,14 @@ class Agent:
                 updater.cancel()
                 await asyncio.gather(updater, return_exceptions=True)
             # Disconnect alone preserves sessions; stopping service safely terminates owned trees.
+            self.processes.poll()
             for record in self.store.processes():
                 await self.processes.stop(record["session_id"])
+                self.store.ack(record["command_id"], {
+                    "type": "ack", "command_id": record["command_id"], "status": "FAILED",
+                    "pid": record["pid"], "exit_code": None,
+                    "error": "Agent stopped locally before session completion",
+                })
             self.store.close()
         return 75 if self.restart_requested else 0
 

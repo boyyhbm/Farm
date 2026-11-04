@@ -378,6 +378,18 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
             final_job = create(duration=1)
             wait_value(lambda: job(final_job), lambda j: j["status"] == "COMPLETED")
             print("WINDOWS_CHECK both services reconnect after backend restart")
+            # A local service stop must not replay stale RUNNING after restart.
+            interrupted = create(node_ids[0], 60)
+            wait_value(lambda: job(interrupted), lambda j: j["status"] == "RUNNING")
+            service(names[0], "stop")
+            service(names[0], "start")
+            interrupted_result = wait_value(
+                lambda: job(interrupted), lambda j: j["status"] == "FAILED"
+            )
+            assert "stopped locally" in interrupted_result["error"]
+            print(
+                "WINDOWS_CHECK local service restart reconciles interrupted job as FAILED"
+            )
             # Real protected runtime replacement retains both SYSTEM identities.
             for name, node_id in zip(names, node_ids, strict=True):
                 before_heartbeat = node(node_id)["last_heartbeat"]
