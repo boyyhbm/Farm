@@ -1,0 +1,76 @@
+name: Export verified Windows installers
+on:
+  workflow_dispatch:
+    inputs:
+      build_run_id:
+        description: Original Windows build run with genuine EXEs
+        required: true
+        type: string
+      validation_run_id:
+        description: Successful complete installed application validation run
+        required: true
+        type: string
+permissions:
+  actions: read
+  contents: write
+jobs:
+  export-draft:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    env:
+      GH_TOKEN: ${{ github.token }}
+      BUILD_RUN: ${{ inputs.build_run_id }}
+      VALIDATION_RUN: ${{ inputs.validation_run_id }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require a successful completed Windows validation
+        shell: pwsh
+        run: |
+          $Run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $Run.status -ne 'completed' -or $Run.conclusion -ne 'success' -or $Run.path -ne '.github/workflows/windows-validate-existing.yml') { throw 'Complete successful installed validation required.' }
+      - uses: actions/download-artifact@v4
+        with:
+          name: CS2-Farm-Windows-x64
+          path: artifacts/build
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.build_run_id }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: Windows-verification
+          path: artifacts/verification
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.validation_run_id }}
+      - name: Verify provenance, complete coverage and exact EXE hashes
+        shell: pwsh
+        run: |
+          $Provenance = Get-Content artifacts/verification/validation-provenance.json -Raw | ConvertFrom-Json
+          $Smoke = Get-Content artifacts/verification/installer-smoke.json -Raw | ConvertFrom-Json
+          if ([string]$Provenance.build_run -ne [string]$env:BUILD_RUN -or !$Smoke.passed -or $Smoke.products -ne 'all') { throw 'Validation does not cover this build and both products.' }
+          $Required = @('installed_manager_smoke','repair_install_preserves_all_database_rows','manager_relaunches_persisted_database_after_reinstall','two_real_scm_agents','manager_program_removed','agent_program_removed')
+          foreach ($Name in $Required) {
+            if (!($Smoke.checks | Where-Object { $_.name -eq $Name -and $_.passed })) { throw "Missing successful installed check: $Name" }
+          }
+          $Manifest = Get-Content artifacts/build/build-manifest.json -Raw | ConvertFrom-Json
+          foreach ($Product in @('manager','agent')) {
+            $Name = if ($Product -eq 'manager') {'CS2-Farm-Manager-Setup.exe'} else {'CS2-Farm-Agent-Setup.exe'}
+            if ((Get-FileHash "artifacts/build/$Product/$Name" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Manifest.artifacts.$Name.sha256) { throw "EXE SHA256 mismatch: $Name" }
+          }
+      - name: Create reviewable release draft with exact tested EXEs and reports
+        shell: pwsh
+        run: |
+          $Build = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN" | ConvertFrom-Json
+          $Tag = "windows-validated-$env:BUILD_RUN"
+          $Body = @"
+          Actual Windows Server 2022 validation: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN
+          Original native build: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN
+
+          Includes exact SHA-256-verified Manager and Agent installers, installed smoke reports and two real LocalSystem agent services on one Windows host.
+          Unsigned Authenticode. Clean Windows 11, physical additional PCs, actual OS reboot, interactive UAC/SmartScreen and a distinct-version schema upgrade remain unverified. See the included acceptance checklist.
+          This draft does not claim a stable production release or bypass SmartScreen.
+          "@
+          [IO.File]::WriteAllText('artifacts/release-notes.md', $Body, [Text.UTF8Encoding]::new($false))
+          gh release create $Tag --repo $env:GITHUB_REPOSITORY --draft --target $Build.head_sha --title 'CS2 Farm Manager 0.2.0 — Windows validation' --notes-file artifacts/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release.' }
+          gh release upload $Tag --repo $env:GITHUB_REPOSITORY artifacts/build/manager/CS2-Farm-Manager-Setup.exe artifacts/build/agent/CS2-Farm-Agent-Setup.exe artifacts/build/build-manifest.json artifacts/verification/installer-smoke.json artifacts/verification/manager-smoke.json artifacts/verification/manager-resume.json artifacts/verification/windows-services.xml artifacts/verification/validation-provenance.json docs/WINDOWS-LOCAL-CHECKLIST-RU.md
+          if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
+          gh release view $Tag --repo $env:GITHUB_REPOSITORY --json url,assets,isDraft
