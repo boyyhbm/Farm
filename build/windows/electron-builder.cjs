@@ -20,9 +20,20 @@ module.exports = {
     ...(!agent ? [
       { from: path.join(root, 'build/windows/stage/node'), to: 'node', filter: ['node.exe', 'LICENSE'] },
       { from: path.join(root, 'build/windows/stage/dashboard'), to: 'dashboard', filter: ['**/*'] },
+      // electron-builder's FileMatcher always excludes root node_modules.
+      // A separate source root preserves Next's actual traced dependencies.
+      { from: path.join(root, 'build/windows/stage/dashboard/node_modules'), to: 'dashboard/node_modules', filter: ['**/*'] },
       { from: path.join(root, 'build/windows/stage/downloads'), to: 'downloads', filter: ['*.exe', '*.json'] }
     ] : [])
   ],
+  afterPack: async context => {
+    if (agent) return;
+    const fs = require('node:fs');
+    for (const file of ['node_modules/next/package.json', 'node_modules/react/package.json', '.next/BUILD_ID', 'server.js']) {
+      const target = path.join(context.appOutDir, 'resources/dashboard', file);
+      if (!fs.existsSync(target)) throw new Error(`Incomplete standalone Dashboard payload: ${file}`);
+    }
+  },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],
     requestedExecutionLevel: 'asInvoker',
