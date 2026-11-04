@@ -6,6 +6,11 @@ on:
         description: Completed Windows build run containing CS2-Farm-Windows-x64 artifact
         required: true
         type: string
+      products:
+        description: Installed scenarios to execute
+        type: choice
+        options: [all, agent]
+        default: all
 permissions:
   contents: read
   actions: read
@@ -53,7 +58,9 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Desktop unit tests failed' }
       - name: Install, start bundled components, validate two SCM agents and uninstall
         shell: pwsh
-        run: ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification"
+        env:
+          VERIFY_PRODUCTS: ${{ inputs.products || 'all' }}
+        run: ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification" -Products "$env:VERIFY_PRODUCTS"
       - uses: actions/upload-artifact@v4
         if: always()
         with:

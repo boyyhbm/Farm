@@ -2,7 +2,8 @@
 #Requires -Version 5.1
 param(
     [Parameter(Mandatory=$true)][string]$Artifacts,
-    [Parameter(Mandatory=$true)][string]$Output
+    [Parameter(Mandatory=$true)][string]$Output,
+    [ValidateSet('all','agent')][string]$Products='all'
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -12,6 +13,7 @@ $Report = [ordered]@{
     os=[Environment]::OSVersion.VersionString
     is_clean_windows11=$false
     scope='Actual Windows CI installation and installed bundled-runtime checks; PATH isolation is not proof of a clean OS.'
+    products=$Products
     checks=@()
     unverified=@('clean Windows 11 installation','physical second computer connection','agent after real Windows reboot','SmartScreen user interaction','signed release reputation','upgrade from a distinct previously released schema version')
 }
@@ -61,7 +63,8 @@ function Stop-Installed([string]$InstallDir) {
 }
 try {
     $InstallRoot = Join-Path $env:LOCALAPPDATA 'Programs\CS2FarmInstallerTest'
-    foreach ($Product in @('manager','agent')) {
+    $SelectedProducts = if ($Products -eq 'agent') { @('agent') } else { @('manager','agent') }
+    foreach ($Product in $SelectedProducts) {
         $SetupName = if ($Product -eq 'manager') {'CS2-Farm-Manager-Setup.exe'} else {'CS2-Farm-Agent-Setup.exe'}
         $ExeName = if ($Product -eq 'manager') {'CS2-Farm-Manager.exe'} else {'CS2-Farm-Agent.exe'}
         $DisplayName = if ($Product -eq 'manager') {'CS2 Farm Manager'} else {'CS2 Farm Agent'}
