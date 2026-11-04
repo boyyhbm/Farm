@@ -160,7 +160,21 @@ async def lifespan(app):
             await asyncio.to_thread(worker.stop)
 
 
-app = FastAPI(title="CS2 Farm Manager", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="CS2 Farm Manager", version="0.3.0", lifespan=lifespan)
+
+
+from app.api_protection import router as protection_router
+from app.services.compliance import ProtectionDenied
+app.include_router(protection_router)
+
+@app.exception_handler(ProtectionDenied)
+async def protection_denied(request, exc):
+    from app.services.protection import incident
+    with SessionLocal() as db:
+        incident(db, exc.code, 'CRITICAL' if exc.code=='CONFIRMED_RESTRICTION' else 'HIGH', account_id=exc.account_id,node_id=exc.node_id,source='compliance')
+        audit(db,getattr(getattr(request.state,'user',None),'username','operator'),'protection.operation_denied',exc.account_id or '',{'code':exc.code})
+        db.commit()
+    return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'code':exc.code})
 
 
 @app.exception_handler(IntegrityError)
@@ -262,7 +276,9 @@ def login(
     except Exception:
         pass
     if not valid:
-        audit(db, data.username, "auth.failed")
+        from app.services.protection import incident
+        incident(db,"PANEL_AUTH_FAILURE","MEDIUM",source="panel_auth",occurrence=True)
+        audit(db, user.username if user else "anonymous", "auth.failed")
         db.commit()
         raise HTTPException(401, "Invalid credentials")
     token = secrets.token_urlsafe(48)
@@ -473,6 +489,7 @@ def delete_account(id: str, user=Depends(operator), db: DBSession = Depends(get_
             select(InventorySnapshot.id).where(InventorySnapshot.account_id == id)
         )
         or db.scalar(select(DropRecord.id).where(DropRecord.account_id == id))
+        or db.scalar(select(RiskIncident.id).where(RiskIncident.account_id == id))
     ):
         account.archived = True
         status = "archived"
@@ -690,7 +707,6 @@ def restart_session(
     existing = db.scalar(select(Job).where(Job.idempotency_key == idempotency_key))
     if existing:
         return serial(existing)
-    cancel_job(db, old, user.username)
     data = JobCreate(
         kind=old.kind,
         account_id=old.account_id,
@@ -701,6 +717,7 @@ def restart_session(
         max_attempts=old.max_attempts,
     )
     replacement = create_job(db, data, idempotency_key, user.username)
+    cancel_job(db, old, user.username)
     audit(
         db, user.username, "session.restart", id, {"replacement_job_id": replacement.id}
     )
@@ -743,6 +760,9 @@ def control_action(
             stop_session(db, s, user.username)
     else:
         raise HTTPException(404, "Unknown action")
+    if action == "emergency-stop":
+        from app.services.protection import incident
+        incident(db,"EMERGENCY_STOP","CRITICAL",source="operator:"+user.username)
     audit(db, user.username, "control." + action)
     commit(db)
     return serial(control)
@@ -1065,7 +1085,7 @@ def get_settings(user=Depends(authenticate)):
         "node_offline_seconds": settings().node_offline_seconds,
         "retention_days": settings().retention_days,
         "manual_steam_login_required": True,
-        "version": "0.2.0",
+        "version": "0.3.0",
     }
 
 
@@ -1224,9 +1244,16 @@ async def agent_ws(ws: WebSocket):
         )
         node_id = node.id if node else None
     if not node_id:
+        from app.services.protection import incident
+        with SessionLocal() as db:
+            incident(db,"AGENT_AUTH_FAILURE","HIGH",source="agent_auth",occurrence=True);db.commit()
         await ws.close(code=4401)
         return
     await ws.accept()
+    with SessionLocal() as db:
+        connected_node=db.get(Node,node_id)
+        connected_node.transport_security="tls_at_listener_or_trusted_proxy" if ws.url.scheme=="wss" else "not_verified_at_listener"
+        connected_node.transport_checked_at=utcnow();db.commit()
     try:
         while True:
             raw = await asyncio.wait_for(ws.receive_text(), timeout=40)
@@ -1274,6 +1301,8 @@ async def agent_ws(ws: WebSocket):
 
                     if node.status != "online":
                         notify(db, "node_online", f"Node {node.hostname} online")
+                    from app.services.protection import resolve_condition
+                    resolve_condition(db,"NODE_OFFLINE",node_id=node.id)
                     node.status = "online"
                     node.last_heartbeat = utcnow()
                     node.metrics = {**metrics, "processes": data.get("processes", [])}
@@ -1378,8 +1407,8 @@ def system_status(user=Depends(authenticate)):
     )
     return {
         "mode": "desktop" if desktop else "server",
-        "version": "0.2.0",
-        "backend": {"status": "ready", "version": "0.2.0"},
+        "version": "0.3.0",
+        "backend": {"status": "ready", "version": "0.3.0"},
         "database": {
             "engine": "sqlite" if desktop else "postgresql",
             "status": checks["database"],
@@ -1466,3 +1495,17 @@ if settings().deployment_mode == "desktop":
             )
         except httpx.HTTPError:
             raise HTTPException(503, "Dashboard component unavailable")
+
+
+from fastapi.exceptions import RequestValidationError
+@app.exception_handler(RequestValidationError)
+async def protected_validation_error(request,exc):
+    errors=[{'loc': e['loc'], 'msg':e['msg'], 'type':e['type']} for e in exc.errors()]
+    actor=getattr(getattr(request.state,'user',None),'username',None)
+    if actor and request.method=='POST' and request.url.path in {P+'/jobs',P+'/accounts',P+'/schedules'}:
+        from app.services.protection import incident
+        code='INVALID_ACCOUNT_DATA' if request.url.path==P+'/accounts' else 'POLICY_VIOLATION'
+        with SessionLocal() as db:
+            incident(db,code,'MEDIUM',source='request_validation',evidence={'error_types':list({e['type'] for e in exc.errors()})},occurrence=True)
+            db.commit()
+    return JSONResponse(status_code=422,content=jsonable_encoder({'detail':errors}))

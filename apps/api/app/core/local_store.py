@@ -113,7 +113,7 @@ class LocalStore:
             )
         return id
 
-    def claim(self, lease_seconds=900):
+    def claim(self, lease_seconds=900, kind=None):
         with self.connection() as db:
             db.execute("BEGIN IMMEDIATE")
             now = time.time()
@@ -122,8 +122,8 @@ class LocalStore:
                 (now,),
             )
             row = db.execute(
-                "SELECT * FROM tasks WHERE status='queued' AND available<=? ORDER BY created LIMIT 1",
-                (now,),
+                "SELECT * FROM tasks WHERE status='queued' AND available<=?" + (" AND kind=?" if kind else "") + " ORDER BY created LIMIT 1",
+                (now,kind) if kind else (now,),
             ).fetchone()
             if not row:
                 return None

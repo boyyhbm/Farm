@@ -26,6 +26,12 @@ def client():
     assert engine.url.database.endswith("_test"), (
         "Use scripts/test.sh (isolated test database)"
     )
+    from redis import Redis
+    from app.core.config import settings
+
+    isolated_redis = Redis.from_url(settings().redis_url)
+    assert isolated_redis.connection_pool.connection_kwargs["db"] == 14
+    isolated_redis.delete("farm:rate:login:testclient", "farm:rate:api:testclient")
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     with SessionLocal() as db:
@@ -109,6 +115,55 @@ def dispatch():
     with SessionLocal() as db:
         tick(db)
         db.commit()
+
+
+def test_protection_rejects_unsupported_operations_and_audits_without_secrets(client):
+    from app.models.models import RiskIncident
+
+    result = client.post(
+        "/api/v1/jobs",
+        json={"kind": "auto_xp", "password": "DO_NOT_LOG_ME"},
+        headers={"Idempotency-Key": str(uuid.uuid4())},
+    )
+    assert result.status_code == 422 and "DO_NOT_LOG_ME" not in result.text
+    result = client.post("/api/v1/accounts", json={"steam_id": "invalid-account"})
+    assert result.status_code == 422
+    with SessionLocal() as db:
+        assert db.scalar(
+            select(RiskIncident).where(RiskIncident.code == "POLICY_VIOLATION")
+        )
+        assert db.scalar(
+            select(RiskIncident).where(RiskIncident.code == "INVALID_ACCOUNT_DATA")
+        )
+    assert (
+        client.get("/api/v1/protection/overview").json()["prediction_available"]
+        is False
+    )
+
+
+def test_protection_emergency_stop_records_incident_and_real_stop_commands(client):
+    from app.models.models import RiskIncident, Control
+
+    n = node(client)
+    j = job(client)
+    with client.websocket_connect(
+        "/ws/agent", headers={"Authorization": "Bearer " + n["credential"]}
+    ) as ws:
+        heartbeat(ws)
+        dispatch()
+        commands = heartbeat(ws)
+        assert len(commands) == 1
+        ack(ws, commands[0], "RUNNING", pid=100)
+        result = client.post("/api/v1/control/emergency-stop")
+        assert result.status_code == 200, result.text
+        commands = heartbeat(ws)
+        assert any(c.get("operation") == "stop" for c in commands)
+        with SessionLocal() as db:
+            assert db.get(Control, 1).paused
+            assert db.get(Job, j["id"]).status == "CANCELLED"
+            assert db.scalar(
+                select(RiskIncident).where(RiskIncident.code == "EMERGENCY_STOP")
+            )
 
 
 def test_account_import_search_export_bulk_and_csrf(client):

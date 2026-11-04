@@ -41,6 +41,8 @@ def bootstrap(db):
                 role="admin",
             )
         )
+    from app.services.compliance import policy
+    policy(db)
     db.commit()
 
 
@@ -56,6 +58,7 @@ def authenticate(request: Request, db: Session = Depends(get_db)):
     user = db.get(User, session.user_id)
     if not user or not user.active:
         raise HTTPException(401, "Access revoked")
+    request.state.user = user
     request.state.auth_session = session
     if request.method not in ("GET", "HEAD", "OPTIONS"):
         if not allowed_origin(request.headers.get("origin")):

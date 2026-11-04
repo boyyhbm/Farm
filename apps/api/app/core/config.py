@@ -1,9 +1,11 @@
 from functools import lru_cache
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    steam_api_key: SecretStr = SecretStr("")
     database_url: str = "sqlite:///./farm.db"
     redis_url: str = "redis://localhost:6379/0"
     public_origin: str = "http://localhost:3000"

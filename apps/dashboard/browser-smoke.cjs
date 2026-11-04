@@ -64,6 +64,7 @@ const env = Object.fromEntries(
     "Инвентарь",
     "Рынок",
     "Аналитика",
+    "Защита",
     "Журнал аудита",
     "Настройки",
   ]) {
@@ -115,6 +116,56 @@ const env = Object.fromEntries(
     .getByRole("button", { name: "Confirm / Подтвердить", exact: true })
     .click();
   await page.getByRole("dialog").waitFor({ state: "hidden" });
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Защита", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Защита", exact: true }).waitFor();
+  const riskRow = page
+    .getByRole("row")
+    .filter({ hasText: "76561199999888881" });
+  await riskRow.getByRole("button", { name: "История", exact: true }).click();
+  await page
+    .getByText(
+      "Оценка проверяемых технических и операционных событий. Прогноз VAC-бана не выполняется.",
+      { exact: true },
+    )
+    .waitFor();
+  await riskRow
+    .getByRole("button", { name: "Приостановить", exact: true })
+    .click();
+  await page
+    .locator("textarea[name=note]")
+    .fill("E2E explicit operator review");
+  await page.locator("input[name=confirmed]").check();
+  await page
+    .getByRole("button", { name: "Confirm / Подтвердить", exact: true })
+    .click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  await riskRow.getByText("HIGH", { exact: true }).waitFor();
+  await page.screenshot({
+    path: path.join(
+      __dirname,
+      "../../tests/e2e/artifacts/protection-desktop.png",
+    ),
+    fullPage: true,
+  });
+  await riskRow
+    .getByRole("button", { name: "Снять паузу", exact: true })
+    .click();
+  await page
+    .locator("textarea[name=note]")
+    .fill("E2E restore permitted operations");
+  await page.locator("input[name=confirmed]").check();
+  await page
+    .getByRole("button", { name: "Confirm / Подтвердить", exact: true })
+    .click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  await riskRow.getByText("MEDIUM", { exact: true }).waitFor();
+  await page
+    .getByRole("navigation")
+    .getByRole("button", { name: "Аккаунты", exact: true })
+    .click();
   await row.getByRole("button", { name: "Удалить", exact: true }).click();
   await page
     .getByRole("button", { name: "Confirm / Подтвердить", exact: true })
@@ -143,7 +194,8 @@ const env = Object.fromEntries(
   await page.getByRole("heading", { name: "Аккаунты", exact: true }).waitFor();
   const result = {
     checked_at: new Date().toISOString(),
-    sections: 11,
+    sections: 12,
+    protection_manual_hold_history_and_release: true,
     system_management_status: true,
     system_management_diagnostics: true,
     account_create_edit_delete: true,

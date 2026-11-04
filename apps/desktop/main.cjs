@@ -299,6 +299,13 @@ async function smokeTest() {
     const stored = await fetch(`${ORIGIN}/api/v1/accounts/${account.id}`, { headers: { Cookie: cookie } });
     if (!stored.ok || (await stored.json()).id !== account.id) throw new Error('Persisted account not found after restart');
     check('database_persists_after_restart');
+    const protection = await fetch(`${ORIGIN}/api/v1/protection/overview`, { headers: { Cookie: cookie } });
+    if (!protection.ok) throw new Error(`Protection HTTP ${protection.status}`);
+    const security = await protection.json();
+    if (security.prediction_available !== false || security.accounts < 1 || !security.risk_levels) throw new Error('Protection module did not return sourced risk status');
+    const protectionWindow = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    await protectionWindow.loadURL(ORIGIN + '/protection'); protectionWindow.destroy();
+    check('packaged_protection_api_and_page');
     const diagnostic = await diagnose(supervisor, { mode: 'server' }, app.getVersion());
     if (!diagnostic.passed) throw new Error('Packaged GUI diagnosis failed: ' + JSON.stringify(diagnostic.checks));
     check('graphical_self_diagnostics_all_automatic_checks');

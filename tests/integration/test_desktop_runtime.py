@@ -35,6 +35,81 @@ def port():
         return probe.getsockname()[1]
 
 
+def test_protection_upgrade_preserves_existing_0002_accounts_and_admin(tmp_path):
+    import sqlite3
+
+    data = tmp_path / "upgrade-existing"
+    credentials = {"username": "upgradeadmin", "password": "upgrade-password-1234"}
+    invoke(data, "configure", credentials)
+    script = """
+import sys
+from pathlib import Path
+from desktop_entry import configure_environment
+configure_environment(Path(sys.argv[1]), 'http://127.0.0.1:17830')
+from app.core.db import SessionLocal
+from app.models.models import SteamAccount
+from alembic.config import Config
+from alembic import command
+with SessionLocal() as db:
+    db.add(SteamAccount(steam_id='76561198000000001', notes='Preserve existing account', profile_url='https://steamcommunity.com/profiles/76561198000000001'))
+    db.commit()
+config = Config('apps/api/alembic.ini')
+config.set_main_option('script_location', 'apps/api/migrations')
+command.downgrade(config, '0002')
+"""
+    result = subprocess.run(
+        [sys.executable, "-c", script, str(data)],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                ("apps/api", "apps/windows-agent", "packages/gameplay-test-engine")
+            ),
+        },
+        cwd=ROOT,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    with closing(sqlite3.connect(data / "farm.sqlite3")) as db:
+        assert (
+            db.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+            == "0002"
+        )
+        password_hash = db.execute("SELECT password_hash FROM users").fetchone()[0]
+    upgrade = "from pathlib import Path; import sys; from desktop_entry import configure_environment, migrate; configure_environment(Path(sys.argv[1]), 'http://127.0.0.1:17830'); migrate()"
+    result = subprocess.run(
+        [sys.executable, "-c", upgrade, str(data)],
+        capture_output=True,
+        text=True,
+        env={
+            **os.environ,
+            "PYTHONPATH": os.pathsep.join(
+                ("apps/api", "apps/windows-agent", "packages/gameplay-test-engine")
+            ),
+        },
+        cwd=ROOT,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    with closing(sqlite3.connect(data / "farm.sqlite3")) as db:
+        assert (
+            db.execute("SELECT version_num FROM alembic_version").fetchone()[0]
+            == "0003"
+        )
+        assert db.execute("SELECT steam_id, notes FROM steam_accounts").fetchone() == (
+            "76561198000000001",
+            "Preserve existing account",
+        )
+        assert (
+            db.execute("SELECT password_hash FROM users").fetchone()[0] == password_hash
+        )
+        assert (
+            db.execute("SELECT provider_status FROM protection_policy").fetchone()[0]
+            == "NOT_CONFIGURED"
+        )
+
+
 def test_desktop_first_launch_api_persistence_backup_restore_without_redis(tmp_path):
     data = tmp_path / "Farm"
     api_port = port()

@@ -19,11 +19,15 @@ celery_app.conf.update(
     task_acks_late=True,
     worker_prefetch_multiplier=1,
     broker_connection_retry_on_startup=True,
-    task_routes={"farm.inventory_sync": {"queue": "inventory"}},
+    task_routes={
+        "farm.inventory_sync": {"queue": "inventory"},
+        "farm.protection_check": {"queue": "protection"},
+    },
     beat_schedule={
         "dispatch": {"task": "farm.dispatch", "schedule": 5.0},
         "notifications": {"task": "farm.notifications", "schedule": 30.0},
         "inventory-scan": {"task": "farm.inventory_scan", "schedule": 60.0},
+        "protection-check": {"task": "farm.protection_check", "schedule": 60.0},
         "retention": {"task": "farm.retention", "schedule": 3600.0},
         "daily-report": {
             "task": "farm.daily_report",
@@ -58,6 +62,16 @@ def inventory_sync(self, account_id):
             audit(db, "inventory", "inventory.failed", account_id, {"error": str(exc)})
             from app.services.notifications import notify
 
+            from app.services.protection import incident
+
+            incident(
+                db,
+                "STEAM_RATE_LIMIT" if "429" in str(exc) else "STEAM_SYNC_FAILED",
+                account_id=account_id,
+                source="steam_inventory",
+                evidence={"error": str(exc)[:500]},
+                occurrence=True,
+            )
             notify(
                 db,
                 "inventory_sync_failed",
@@ -123,6 +137,19 @@ def retention():
                 Notification.status.in_(("sent", "skipped", "failed")),
             )
         )
+        from app.models.models import RiskCheck, RiskIncident
+
+        db.execute(
+            delete(RiskCheck).where(
+                RiskCheck.checked_at < utcnow() - timedelta(days=365)
+            )
+        )
+        db.execute(
+            delete(RiskIncident).where(
+                RiskIncident.status == "RESOLVED",
+                RiskIncident.resolved_at < utcnow() - timedelta(days=365),
+            )
+        )
         db.commit()
 
 
@@ -155,3 +182,14 @@ def inventory_scan():
                 if queued >= 20:
                     break
     return {"queued": queued}
+
+
+@celery_app.task(name="farm.protection_check", bind=True, max_retries=3)
+def protection_check(self, account_ids=None):
+    from app.services.protection import check_accounts
+
+    with SessionLocal() as db:
+        result = check_accounts(db, account_ids)
+    if account_ids and result["status"] in {"BUSY", "COOLDOWN", "LEASE_EXPIRED"}:
+        raise self.retry(countdown=result.get("retry_after", 60))
+    return result

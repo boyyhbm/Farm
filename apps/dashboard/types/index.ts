@@ -22,7 +22,8 @@ export type Section =
   | "market"
   | "analytics"
   | "logs"
-  | "settings";
+  | "settings"
+  | "protection";
 export type Field = {
   name: string;
   label: string;

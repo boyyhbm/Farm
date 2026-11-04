@@ -16,8 +16,11 @@ from app.models.models import (
     Control,
     Schedule,
     SteamAccount,
+    AccountRisk,
 )
 from app.schemas.api import JobCreate
+from app.services.compliance import decision, policy
+from app.services.notifications import _safe_message as safe_message
 
 ACTIVE = ("STARTING", "RUNNING", "STOPPING", "UNKNOWN")
 TERMINAL = ("STOPPED", "FAILED", "TIMED_OUT")
@@ -70,6 +73,11 @@ def create_job(db, data: JobCreate, key, actor):
         raise HTTPException(
             422, "Steam/CS2 sessions require an account and manual client authorization"
         )
+    from app.services.compliance import assert_operation
+
+    assert_operation(
+        db, data, db.get(SteamAccount, data.account_id) if data.account_id else None
+    )
     job = Job(
         **data.model_dump(exclude={"payload", "scheduled_at"}),
         payload=data.payload.model_dump(),
@@ -123,6 +131,13 @@ def retry_job(db, job, actor):
         select(Session.id).where(Session.job_id == job.id, Session.status.in_(ACTIVE))
     ):
         raise HTTPException(409, "Unresolved session still reserves node")
+    from app.services.compliance import assert_operation
+
+    assert_operation(
+        db,
+        JobCreate(kind=job.kind, account_id=job.account_id, node_id=job.node_id),
+        db.get(SteamAccount, job.account_id) if job.account_id else None,
+    )
     job.status = "QUEUED"
     job.attempts = 0
     job.scheduled_at = utcnow()
@@ -180,7 +195,7 @@ def acknowledge(db, node, data):
     if command.ack_status in ("STOPPED", "FAILED"):
         return
     if status == "FAILED" and data.get("error"):
-        node.last_error = str(data["error"])[:4000]
+        node.last_error = safe_message(str(data["error"]))[:4000]
     session = db.get(Session, command.session_id) if command.session_id else None
     command.ack_status = status
     command.ack = {
@@ -188,6 +203,23 @@ def acknowledge(db, node, data):
         for k in ("status", "pid", "exit_code", "error", "resource_usage")
         if k in data
     }
+    if (
+        session
+        and status == "FAILED"
+        and db.get(Job, session.job_id).kind in ("steam", "cs2")
+    ):
+        from app.services.protection import incident
+
+        incident(
+            db,
+            "STEAM_PROCESS_ERROR",
+            "HIGH",
+            account_id=session.account_id,
+            node_id=node.id,
+            job_id=session.job_id,
+            source="agent_process",
+            evidence={"error": safe_message(data.get("error", "Process failed"))},
+        )
     if session:
         if session.status in TERMINAL:
             return
@@ -209,7 +241,7 @@ def acknowledge(db, node, data):
                 db,
                 session,
                 "TIMED_OUT" if timed_out else status,
-                str(data.get("error"))[:4000] if data.get("error") else None,
+                safe_message(str(data.get("error")))[:4000] if data.get("error") else None,
                 data.get("exit_code"),
             )
             # A terminal result also resolves any pending start/stop commands for this session.
@@ -243,6 +275,9 @@ def tick(db):
         text("SELECT pg_try_advisory_xact_lock(73294021)")
     ):
         return
+    from app.services.protection import enforce
+
+    enforce(db)
     control = db.get(Control, 1)
     if not control:
         return
@@ -255,6 +290,20 @@ def tick(db):
             or aware(node.last_heartbeat)
             < now - timedelta(seconds=settings().node_offline_seconds)
         ):
+            from app.services.protection import incident
+
+            incident(
+                db,
+                "NODE_OFFLINE",
+                "HIGH",
+                node_id=node.id,
+                source="heartbeat",
+                evidence={
+                    "last_heartbeat": aware(node.last_heartbeat).isoformat()
+                    if node.last_heartbeat
+                    else None
+                },
+            )
             node.status = "offline"
             notify(db, "node_offline", f"Node {node.hostname} offline", "warning")
             for s in db.scalars(
@@ -299,6 +348,19 @@ def tick(db):
                 seconds=missed * schedule.interval_seconds
             )
         except (ValueError, HTTPException) as exc:
+            from app.services.compliance import ProtectionDenied
+
+            if isinstance(exc, ProtectionDenied):
+                from app.services.protection import incident
+
+                incident(
+                    db,
+                    exc.code,
+                    "HIGH",
+                    account_id=exc.account_id,
+                    node_id=exc.node_id,
+                    source="schedule_compliance",
+                )
             schedule.enabled = False
             audit(
                 db, "scheduler", "schedule.disabled", schedule.id, {"error": str(exc)}
@@ -326,6 +388,8 @@ def tick(db):
         if control.policy != "fifo"
         else (Job.created_at,)
     )
+    risk_by_account = {r.account_id: r for r in db.scalars(select(AccountRisk))}
+    rules = policy(db)
     jobs = list(
         db.scalars(
             select(Job)
@@ -350,6 +414,9 @@ def tick(db):
                 for n in nodes
                 if n.id not in busy
                 and (not assigned or n.id == assigned)
+                and not decision(
+                    job.kind, account, risk_by_account.get(job.account_id), rules, n.id
+                )
                 and n.last_heartbeat
                 and aware(n.last_heartbeat)
                 > now - timedelta(seconds=settings().node_offline_seconds)

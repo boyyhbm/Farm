@@ -28,6 +28,7 @@ class DesktopWorker:
         for target, name in (
             (self.control_loop, "desktop-scheduler"),
             (self.inventory_loop, "desktop-inventory"),
+            (self.protection_loop, "desktop-protection"),
         ):
             t = threading.Thread(target=target, name=name, daemon=True)
             t.start()
@@ -99,7 +100,7 @@ class DesktopWorker:
         while not self.stop_event.is_set():
             task = None
             try:
-                task = self.store.claim()
+                task = self.store.claim(kind="inventory")
                 if task:
                     with SessionLocal() as db:
                         sync_inventory(db, task["payload"]["account_id"])
@@ -137,6 +138,21 @@ class DesktopWorker:
                             task["payload"]["account_id"],
                             {"error": error},
                         )
+                        from app.services.protection import incident, safe_message
+
+                        incident(
+                            db,
+                            "STEAM_RATE_LIMIT"
+                            if isinstance(exc, InventoryUnavailable)
+                            and "429" in str(exc)
+                            else "STEAM_SYNC_FAILED",
+                            account_id=task["payload"]["account_id"],
+                            source="steam_inventory",
+                            evidence={
+                                "error": safe_message(error)
+                            },
+                            occurrence=True,
+                        )
                         notify(
                             db,
                             "inventory_sync_failed",
@@ -145,3 +161,37 @@ class DesktopWorker:
                         )
                         db.commit()
                 self.stop_event.wait(1)
+
+    def protection_loop(self):
+        from app.services.protection import check_accounts
+
+        while not self.stop_event.is_set():
+            task = None
+            try:
+                task = self.store.claim(kind="protection")
+                with SessionLocal() as db:
+                    result = check_accounts(
+                        db, task["payload"].get("account_ids") if task else None
+                    )
+                    if task:
+                        deferred = result["status"] in {
+                            "BUSY",
+                            "COOLDOWN",
+                            "LEASE_EXPIRED",
+                        }
+                        self.store.finish(
+                            task["id"],
+                            "Protection request deferred" if deferred else None,
+                            result.get("retry_after", 60)
+                            if deferred and task["attempts"] < 4
+                            else None,
+                        )
+            except Exception:
+                log.exception("Protection worker failed")
+                if task:
+                    self.store.finish(
+                        task["id"],
+                        "Protection worker unavailable",
+                        60 if task["attempts"] < 4 else None,
+                    )
+            self.stop_event.wait(10)

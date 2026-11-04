@@ -55,6 +55,7 @@ import { api, ApiError, setCsrf, download, allPages } from "@/services/api";
 import { useUI } from "@/lib/store";
 import { money, date } from "@/lib/utils";
 import type { User, Page, Row, Field, Section } from "@/types";
+import Protection, { ProtectionSummary } from "@/components/protection";
 const menu = [
   { id: "dashboard", icon: LayoutDashboard, en: "Overview", ru: "Обзор" },
   { id: "accounts", icon: Users, en: "Accounts", ru: "Аккаунты" },
@@ -70,6 +71,7 @@ const menu = [
     en: "Analytics",
     ru: "Аналитика",
   },
+  { id: "protection", icon: ShieldCheck, en: "Protection", ru: "Защита" },
   { id: "logs", icon: ScrollText, en: "Audit logs", ru: "Журнал аудита" },
   { id: "settings", icon: Settings, en: "Settings", ru: "Настройки" },
 ] as const;
@@ -242,10 +244,11 @@ function Chart({
     </div>
   );
 }
-export default function FarmDashboard() {
+export default function FarmDashboard({ initialSection }: { initialSection?: Section } = {}) {
   const client = useQueryClient();
   const { locale, setLocale, section, setSection } = useUI();
   const ru = locale === "ru";
+  useEffect(() => { if (initialSection) setSection(initialSection); }, [initialSection, setSection]);
   const t = (a: string, b: string) => (ru ? a : b);
   const [authenticated, setAuthenticated] = useState(false);
   const [loginError, setLoginError] = useState("");
@@ -1043,6 +1046,8 @@ export default function FarmDashboard() {
               </div>
             </div>
           )}
+          {section === "dashboard" && <ProtectionSummary ru={ru} onOpen={() => setSection("protection")} />}
+          {section === "protection" && <Protection ru={ru} role={me.data?.role || "viewer"} />}
           {section === "dashboard" && (
             <>
               {overview.error && (
@@ -1264,7 +1269,7 @@ export default function FarmDashboard() {
                     "Prime status and weekly rewards require explicit confirmation. Steam passwords are never requested.",
                   )}
                 </p>
-                <span className="subtle-badge">SteamID64</span>
+                <Button variant="secondary" size="sm" onClick={() => setSection("protection")}>{t("Защита аккаунтов", "Account protection")}</Button>
               </div>
               <div className="filter-row">
                 <label className="field">
