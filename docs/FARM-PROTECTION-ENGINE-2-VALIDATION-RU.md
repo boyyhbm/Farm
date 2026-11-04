@@ -45,7 +45,7 @@ Windows CI использует Windows Server 2022 x64 и две LocalSystem-с
 
 ## Проверенные установщики
 
-[EXE и первичные JSON/JUnit-отчёты в черновике выпуска](https://github.com/boyyhbm/Farm/releases/tag/untagged-41d496b9251844b0edb1) доступны владельцу репозитория. [Экспортный CI](https://github.com/boyyhbm/Farm/actions/runs/41936809533) повторно проверил происхождение, полноту сценариев и SHA-256 перед загрузкой.
+[EXE и первичные JSON/JUnit-отчёты в черновике выпуска](https://github.com/boyyhbm/Farm/releases) доступны владельцу репозитория. [Экспортный CI](https://github.com/boyyhbm/Farm/actions/runs/41936809533) повторно проверил происхождение, полноту сценариев и SHA-256 перед загрузкой.
 
 | Файл | Размер, байт | SHA-256 |
 | --- | ---: | --- |

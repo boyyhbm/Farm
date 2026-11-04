@@ -126,7 +126,7 @@
   },
   "release": {
     "draft": true,
-    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-41d496b9251844b0edb1",
+    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-52a63b42763a1b543e92",
     "export_workflow": "https://github.com/boyyhbm/Farm/actions/runs/41936809533"
   },
   "local_installer_verification": {
