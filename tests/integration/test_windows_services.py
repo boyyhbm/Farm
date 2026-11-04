@@ -315,7 +315,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 previous = node(node_id).get("last_heartbeat")
                 wait_value(
                     lambda node_id=node_id: node(node_id),
-                    lambda n: (
+                    lambda n, previous=previous: (
                         n["status"] == "online" and n["last_heartbeat"] != previous
                     ),
                 )
@@ -326,7 +326,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
         for name in reversed(installed):
             try:
                 service(name, "remove")
-            except Exception:
+            except Exception:  # noqa: BLE001 - best-effort cleanup preserves original failure
                 # Preserve original failure while leaving cleanup evidence in CI output.
                 print("SCM cleanup failed for " + name)
         if server and server.poll() is None:

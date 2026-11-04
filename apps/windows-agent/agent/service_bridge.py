@@ -348,7 +348,7 @@ def host(name="CS2FarmAgent", enroll=False):
                     response = asyncio.run(
                         enroll_desktop(data, json.loads(request.read_text()))
                     )
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - SCM must receive a sanitized failure result
                     response = {
                         "status": "failed",
                         "error": type(exc).__name__ + ": " + str(exc)[:1000],

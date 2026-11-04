@@ -140,6 +140,7 @@ function createIpc() {
           if (product.agentOnly && input.mode !== 'agent') throw new Error('Этот установщик содержит только агент.');
           if (input.mode === 'agent' && input.serviceMode) {
             await serviceAdmin(supervisor, 'install', { server_url: input.serverUrl, token: input.token, ...(input.ca_certificate ? { ca_certificate: input.ca_certificate } : {}) });
+            if (input.ca_certificate) fs.writeFileSync(path.join(dataDir, 'trusted-server-ca.pem'), input.ca_certificate, { mode: 0o600 });
           } else if (input.mode !== 'remote') await supervisor.configure(input);
           else {
             const response = await fetch(httpsUrl(input.serverUrl) + '/health/ready', { redirect: 'error', signal: AbortSignal.timeout(15000) });
