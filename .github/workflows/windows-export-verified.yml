@@ -60,10 +60,14 @@ jobs:
           $Suite = $JUnit.testsuites.testsuite
           if ([int]$Suite.tests -ne 1 -or [int]$Suite.skipped -ne 0 -or [int]$Suite.failures -ne 0 -or [int]$Suite.errors -ne 0) { throw 'An executed successful SCM integration test is required.' }
           $Manifest = Get-Content artifacts/build/build-manifest.json -Raw | ConvertFrom-Json
+          $Signatures = @{}
           foreach ($Product in @('manager','agent')) {
             $Name = if ($Product -eq 'manager') {'CS2-Farm-Manager-Setup.exe'} else {'CS2-Farm-Agent-Setup.exe'}
             if ((Get-FileHash "artifacts/build/$Product/$Name" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Manifest.artifacts.$Name.sha256) { throw "EXE SHA256 mismatch: $Name" }
+            $Signature = Get-AuthenticodeSignature "artifacts/build/$Product/$Name"
+            $Signatures[$Name] = @{status=$Signature.Status.ToString(); signer=if ($Signature.SignerCertificate) {$Signature.SignerCertificate.Subject} else {$null}}
           }
+          $Signatures | ConvertTo-Json -Depth 4 | Set-Content artifacts/verification/windows-installer-signatures.json -Encoding utf8
       - name: Create reviewable release draft with exact tested EXEs and reports
         shell: pwsh
         run: |
@@ -80,6 +84,6 @@ jobs:
           [IO.File]::WriteAllText('artifacts/release-notes.md', $Body, [Text.UTF8Encoding]::new($false))
           gh release create $Tag --repo $env:GITHUB_REPOSITORY --draft --target $Build.head_sha --title 'CS2 Farm Manager 0.2.0 — Windows validation' --notes-file artifacts/release-notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release.' }
-          gh release upload $Tag --repo $env:GITHUB_REPOSITORY artifacts/build/manager/CS2-Farm-Manager-Setup.exe artifacts/build/agent/CS2-Farm-Agent-Setup.exe artifacts/build/build-manifest.json artifacts/verification/installer-smoke.json artifacts/verification/manager-smoke.json artifacts/verification/manager-resume.json artifacts/verification/windows-services.xml artifacts/verification/validation-provenance.json docs/WINDOWS-LOCAL-CHECKLIST-RU.md
+          gh release upload $Tag --repo $env:GITHUB_REPOSITORY artifacts/build/manager/CS2-Farm-Manager-Setup.exe artifacts/build/agent/CS2-Farm-Agent-Setup.exe artifacts/build/build-manifest.json artifacts/verification/installer-smoke.json artifacts/verification/manager-smoke.json artifacts/verification/manager-resume.json artifacts/verification/windows-services.xml artifacts/verification/validation-provenance.json artifacts/verification/windows-installer-signatures.json docs/WINDOWS-LOCAL-CHECKLIST-RU.md
           if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
           gh release view $Tag --repo $env:GITHUB_REPOSITORY --json url,assets,isDraft
