@@ -115,6 +115,10 @@ def test_frozen_child_uses_runtime_engine_entrypoint(tmp_path, monkeypatch):
     pm = manager.ProcessManager(config, store)
     monkeypatch.setattr(manager.sys, "frozen", True, raising=False)
     monkeypatch.setattr(manager.subprocess, "Popen", FakePopen)
+    # The fixture uses our own PID: never attach the pytest process to a kill-on-close job.
+    from process_manager import windows
+    from types import SimpleNamespace
+    monkeypatch.setattr(windows, 'attach_job', lambda pid: SimpleNamespace(Close=lambda: None))
     pm.start("session-test", "command-test", "test", {"duration_seconds": 1})
     assert captured["argv"][:2] == [manager.sys.executable, "engine"]
     assert "-m" not in captured["argv"]

@@ -75,7 +75,7 @@ def attach_job(pid):
     import win32api
     import win32con
     import win32job
-    job = win32job.CreateJobObject(None, None)
+    job = win32job.CreateJobObject(None, "")
     info = win32job.QueryInformationJobObject(job, win32job.JobObjectExtendedLimitInformation)
     info["BasicLimitInformation"]["LimitFlags"] |= win32job.JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
     win32job.SetInformationJobObject(job, win32job.JobObjectExtendedLimitInformation, info)
