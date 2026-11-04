@@ -3,7 +3,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$Artifacts,
     [Parameter(Mandatory=$true)][string]$Output,
-    [ValidateSet('all','agent')][string]$Products='all'
+    [ValidateSet('all','agent')][string]$Products='all',
+    [switch]$DiagnosticOverlay
 )
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
@@ -14,6 +15,7 @@ $Report = [ordered]@{
     is_clean_windows11=$false
     scope='Actual Windows CI installation and installed bundled-runtime checks; PATH isolation is not proof of a clean OS.'
     products=$Products
+    diagnostic_source_overlay=[bool]$DiagnosticOverlay
     checks=@()
     unverified=@('clean Windows 11 installation','physical second computer connection','agent after real Windows reboot','SmartScreen user interaction','signed release reputation','upgrade from a distinct previously released schema version')
 }
@@ -107,6 +109,14 @@ try {
                 Record 'manager_relaunches_persisted_database_after_reinstall' ([bool]$Resumed.passed) (Get-Content $Resume -Raw)
             } finally { $env:PATH = $OriginalPath }
         } else {
+            # Explicit source-only diagnostic pass while an immutable installer rebuild runs.
+            # This flag is maintainer CI tooling and prevents final-release export.
+            if ($DiagnosticOverlay) {
+                $OverlayTarget = Join-Path $InstallDir 'resources\runtime\farm-runtime\agent\service_bridge.py'
+                if (!(Test-Path $OverlayTarget)) { throw 'Diagnostic source overlay requires embedded runtime.' }
+                Copy-Item apps/windows-agent/agent/service_bridge.py $OverlayTarget -Force
+                Write-Output 'DIAGNOSTIC SOURCE OVERLAY: testing checkout service_bridge.py with real installed bundled interpreter; this is not immutable installer verification.'
+            }
             # GUI must open from the installed Agent product without developer runtimes.
             $RuntimeArguments = @($BundledRuntime.arguments) + @('--help')
             Wait-ProcessResult $BundledRuntime.executable $RuntimeArguments 30

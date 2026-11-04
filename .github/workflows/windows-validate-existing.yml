@@ -11,6 +11,10 @@ on:
         type: choice
         options: [all, agent]
         default: all
+      diagnostic_overlay:
+        description: Diagnostic source-only SCM pass; never qualifies for final export
+        type: boolean
+        default: false
 permissions:
   contents: read
   actions: read
@@ -60,7 +64,10 @@ jobs:
         shell: pwsh
         env:
           VERIFY_PRODUCTS: ${{ inputs.products || 'all' }}
-        run: ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification" -Products "$env:VERIFY_PRODUCTS"
+          DIAGNOSTIC_OVERLAY: ${{ inputs.diagnostic_overlay }}
+        run: |
+          $Overlay = $env:DIAGNOSTIC_OVERLAY -eq 'true'
+          ./build/windows/smoke-installed.ps1 -Artifacts "$PWD/artifacts/windows" -Output "$PWD/artifacts/windows/verification" -Products "$env:VERIFY_PRODUCTS" -DiagnosticOverlay:$Overlay
       - uses: actions/upload-artifact@v4
         if: always()
         with:

@@ -45,7 +45,7 @@ jobs:
         run: |
           $Provenance = Get-Content artifacts/verification/validation-provenance.json -Raw | ConvertFrom-Json
           $Smoke = Get-Content artifacts/verification/installer-smoke.json -Raw | ConvertFrom-Json
-          if ([string]$Provenance.build_run -ne [string]$env:BUILD_RUN -or !$Smoke.passed -or $Smoke.products -ne 'all') { throw 'Validation does not cover this build and both products.' }
+          if ([string]$Provenance.build_run -ne [string]$env:BUILD_RUN -or !$Smoke.passed -or $Smoke.products -ne 'all' -or $Smoke.diagnostic_source_overlay) { throw 'Validation does not cover this build and both products.' }
           $Required = @('installed_manager_smoke','repair_install_preserves_all_database_rows','manager_relaunches_persisted_database_after_reinstall','two_real_scm_agents','manager_program_removed','agent_program_removed')
           foreach ($Name in $Required) {
             if (!($Smoke.checks | Where-Object { $_.name -eq $Name -and $_.passed })) { throw "Missing successful installed check: $Name" }
