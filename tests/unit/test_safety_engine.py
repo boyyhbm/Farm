@@ -249,6 +249,11 @@ def test_account_health_has_sourced_unknown_warning_restricted_and_banned_states
     r.manual_hold = True
     db.commit()
     assert health(a, r, policy(db), context(db))["status"] == "Restricted"
+    held = health(a, r, policy(db), context(db))
+    observation = next(o for o in held["observations"] if o["code"] == "MANUAL_HOLD")
+    assert (
+        observation["checked_at"] is None
+    )  # An authorization timestamp is not a hold timestamp.
     r.vac_banned = True
     db.commit()
     view = health(a, r, policy(db), context(db))

@@ -67,11 +67,19 @@ def health(account, risk, rules, ctx):
             "Economy restriction reported by GetPlayerBans",
         )
     if risk and risk.manual_hold:
+        hold_event = next(
+            (
+                e
+                for e in ctx["by_account"].get(account.id, [])
+                if e.code in ("MANUAL_HOLD", "REPEATED_CLIENT_FAILURE")
+            ),
+            None,
+        )
         add(
             "MANUAL_HOLD",
             "Restricted",
-            "operator_policy",
-            risk.auth_checked_at,
+            hold_event.source if hold_event else "database.account_policy",
+            hold_event.last_seen if hold_event else None,
             "Administrative hold; not an inferred Steam ban",
         )
     verified = bool(
