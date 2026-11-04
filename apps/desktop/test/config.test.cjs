@@ -23,7 +23,7 @@ test('configuration persistence deliberately excludes admin passwords and pairin
     saveConfig(directory, value);
     const raw = fs.readFileSync(path.join(directory, 'desktop.json'), 'utf8');
     assert.ok(!raw.includes(value.password)); assert.ok(!raw.includes('password'));
-    assert.deepEqual(readConfig(directory), { mode: 'server', serverUrl: undefined, autoStart: true, closeToTray: true, version: 1 });
+    assert.deepEqual(readConfig(directory), { mode: 'server', serviceMode: false, serverUrl: undefined, autoStart: true, closeToTray: true, version: 1 });
     saveConfig(directory, { mode: 'agent', serverUrl: 'https://farm.example.org', token: 'secret-enrollment-code-1234' });
     assert.ok(!fs.readFileSync(path.join(directory, 'desktop.json'), 'utf8').includes('enrollment'));
   } finally { fs.rmSync(directory, { recursive: true, force: true }); }

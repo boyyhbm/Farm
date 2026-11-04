@@ -46,7 +46,9 @@ function renderStatus(value) {
   $('data-directory').textContent = 'Данные: ' + (state.dataDirectory || 'неизвестно');
   $('network-panel').hidden = state.config?.mode !== 'server';
   $('notifications-panel').hidden = state.config?.mode !== 'server';
-  $('agent-applications-panel').hidden = state.config?.mode !== 'agent';
+  $('agent-applications-panel').hidden = state.config?.mode !== 'agent' || !!state.config?.serviceMode;
+  $('windows-service-panel').hidden = !state.config?.serviceMode;
+  if (value.windowsService) $('windows-service-state').textContent = `Состояние: ${value.windowsService.status}. Автозапуск: ${value.windowsService.automatic_start ? 'да' : 'не подтверждён'}.`;
   $('backup').disabled = busy || state.config?.mode !== 'server';
   $('restore').disabled = busy || state.config?.mode !== 'server';
   $('restart').disabled = busy || state.config?.mode === 'remote';
@@ -65,7 +67,7 @@ async function setup() {
     input.username = $('username').value.trim(); input.password = $('password').value;
   } else {
     input.serverUrl = $('server-url').value.trim();
-    if (input.mode === 'agent') { input.token = $('enrollment-token').value.trim(); input.fingerprint = fingerprint; input.ca_certificate = $('ca-certificate').value.trim() || null; }
+    if (input.mode === 'agent') { input.serviceMode = $('setup-service').checked; input.token = $('enrollment-token').value.trim(); input.fingerprint = fingerprint; input.ca_certificate = $('ca-certificate').value.trim() || null; }
   }
   step = 4; applyStep();
   try {
@@ -103,7 +105,16 @@ $('parse-link').addEventListener('click', () => {
 });
 $('open-dashboard').addEventListener('click', () => action('open-dashboard').catch(() => {}));
 $('refresh-status').addEventListener('click', () => action('status').then(renderStatus).catch(() => {}));
-$('diagnose').addEventListener('click', () => action('diagnose').then(value => { renderStatus(value); notice('Диагностика завершена. Смотрите реальные состояния компонентов выше.'); }).catch(() => {}));
+$('diagnose').addEventListener('click', () => action('diagnose').then(value => { renderStatus(value); $('diagnostic-results').replaceChildren();
+  for (const check of value.diagnostics.checks) {
+    const card = document.createElement('div'); card.className = check.status === 'failed' ? 'error' : 'card';
+    const title = document.createElement('strong'); title.textContent = `${check.status === 'passed' ? '✓' : check.status === 'manual' ? '○' : '✗'} ${check.title}${check.code ? ' [' + check.code + ']' : ''}`;
+    const detail = document.createElement('p'); detail.textContent = check.detail;
+    card.append(title, detail);
+    if (check.remedy) { const remedy = document.createElement('p'); remedy.textContent = 'Что делать: ' + check.remedy; card.append(remedy); }
+    $('diagnostic-results').append(card);
+  }
+  notice(value.diagnostics.passed ? 'Автоматические проверки пройдены. Ручные проверки отмечены отдельно.' : 'Обнаружены проблемы. Ниже указаны причины и действия.'); }).catch(() => {}));
 $('restart').addEventListener('click', () => { if (confirm('Перезапустить локальные компоненты? Открытые соединения временно прервутся.')) action('restart').then(renderStatus).catch(() => {}); });
 $('backup').addEventListener('click', () => action('backup').then(result => { if (!result.cancelled) notice('Резервная копия сохранена: ' + result.saved); }).catch(() => {}));
 $('restore').addEventListener('click', () => action('restore').then(result => { if (!result.cancelled) notice('Данные восстановлены. Компоненты перезапущены.'); }).catch(() => {}));
@@ -125,6 +136,8 @@ $('quit').addEventListener('click', () => action('quit').catch(() => {}));
 bridge.onStatus(renderStatus); bridge.onEnrollment(applyEnrollment);
 bridge.invoke('status').then(value => {
   state = value;
+  $('setup-service').checked = value.system.platform === 'win32';
+  $('setup-service').disabled = value.system.platform !== 'win32';
   $('version').textContent = `${value.product.name} · ${value.product.version}`;
   $('system-check').textContent = `${value.system.message}\n${value.system.platform} ${value.system.release} · ${value.system.arch}\nRAM: ${(value.system.memoryBytes / 1024 ** 3).toFixed(1)} GB${value.system.diskFreeBytes === null ? '' : '\nСвободно на диске: ' + (value.system.diskFreeBytes / 1024 ** 3).toFixed(1) + ' GB'}${value.system.platform === 'win32' ? '' : '\nСреда разработки: установка Windows здесь не проверяется.'}`;
   for (const iface of value.system.interfaces || []) { const option = document.createElement('option'); option.value = iface.address; option.label = iface.name; $('local-interfaces').append(option); }
@@ -153,3 +166,8 @@ for (const kind of ['steam', 'cs2']) $('choose-' + kind).addEventListener('click
 $('agent-applications-save').addEventListener('click', () => { if (confirm('Сохранить разрешённые приложения и перезапустить агент?')) action('agent-applications-configure', { steam_path: $('steam-path').value, cs2_path: $('cs2-path').value }).then(value => { renderAgentApplications(value); notice('Разрешённые приложения сохранены.'); }).catch(() => {}); });
 
 $('bind-host').addEventListener('change', () => { if (!$('advertised-host').value) $('advertised-host').value = $('bind-host').value; });
+
+$('export-diagnostics').addEventListener('click', () => action('export-diagnostics').then(result => { if (!result.cancelled) notice('Отчёт сохранён: ' + result.saved); }).catch(() => {}));
+
+$('service-refresh').addEventListener('click', () => action('service-status').then(renderStatus).catch(() => {}));
+for (const operation of ['start', 'stop', 'remove']) $('service-' + operation).addEventListener('click', () => action('service-control', { action: operation }).then(value => { if (!value.cancelled) renderStatus(value); }).catch(() => {}));

@@ -34,6 +34,7 @@ function validateSetup(input) {
     if (input.mode === 'agent') {
       if (typeof input.token !== 'string' || !/^[A-Za-z0-9_-]{20,200}$/.test(input.token)) throw new Error('Введите одноразовый код из панели.');
       output.token = input.token;
+      output.serviceMode = input.serviceMode === true;
       if (input.fingerprint && !/^[a-fA-F0-9]{64}$/.test(input.fingerprint)) throw new Error('Отпечаток сертификата должен содержать 64 hex символа.');
       if (input.fingerprint) output.fingerprint = input.fingerprint.toLowerCase();
       if (input.ca_certificate) {
@@ -55,11 +56,11 @@ function readConfig(dataDir) {
   const input = JSON.parse(fs.readFileSync(filename, 'utf8'));
   if (!['server', 'agent', 'remote'].includes(input.mode)) throw new Error('Повреждена конфигурация desktop.json. Восстановите резервную копию через управление системой.');
   if (input.serverUrl) httpsUrl(input.serverUrl);
-  return { mode: input.mode, serverUrl: input.serverUrl, autoStart: !!input.autoStart, closeToTray: input.closeToTray !== false, version: 1 };
+  return { mode: input.mode, serviceMode: input.serviceMode === true, serverUrl: input.serverUrl, autoStart: !!input.autoStart, closeToTray: input.closeToTray !== false, version: 1 };
 }
 function saveConfig(dataDir, input) {
   // Deliberately construct persisted fields. Passwords and enrollment codes never enter this file.
-  const output = { version: 1, mode: input.mode, autoStart: !!input.autoStart, closeToTray: input.closeToTray !== false };
+  const output = { version: 1, mode: input.mode, serviceMode: input.mode === 'agent' && input.serviceMode === true, autoStart: !!input.autoStart, closeToTray: input.closeToTray !== false };
   if (input.serverUrl) output.serverUrl = httpsUrl(input.serverUrl);
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const filename = path.join(dataDir, 'desktop.json');

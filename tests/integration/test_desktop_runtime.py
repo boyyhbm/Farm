@@ -444,3 +444,24 @@ def test_backup_restore_closes_sqlite_handles_for_windows_file_operations(
     for connection in opened:
         with pytest.raises(sqlite3.ProgrammingError):
             connection.execute("SELECT 1")
+
+
+def test_readonly_database_digests_detect_changes_without_exposing_values(tmp_path):
+    import sqlite3
+    from desktop_entry import data_check
+
+    file = tmp_path / "farm.sqlite3"
+    with closing(sqlite3.connect(file)) as db:
+        db.executescript(
+            "CREATE TABLE accounts(id TEXT PRIMARY KEY, notes TEXT); INSERT INTO accounts VALUES('a', 'private-value');"
+        )
+    first = data_check(tmp_path)
+    assert first["ok"]
+    assert first == data_check(tmp_path)
+    assert "private-value" not in json.dumps(first)
+    assert first["databases"]["farm.sqlite3"]["tables"]["accounts"]["rows"] == 1
+    with closing(sqlite3.connect(file)) as db:
+        db.execute("UPDATE accounts SET notes='changed'")
+        db.commit()
+    assert data_check(tmp_path) != first
+    file.rename(tmp_path / "moved.sqlite3")  # Windows: no leaked SQLite handle

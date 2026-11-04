@@ -523,11 +523,64 @@ def runtime_lock(directory):
         file.close()
 
 
+def data_check(directory):
+    """Read-only integrity and row digests; never export database field values."""
+    import hashlib
+    import sqlite3
+
+    reports = {}
+    for name in ("farm.sqlite3", "coordination.sqlite3"):
+        file = directory / name
+        if not file.is_file():
+            reports[name] = {"status": "missing"}
+            continue
+        with closing(
+            sqlite3.connect(file.as_uri() + "?mode=ro", uri=True, timeout=10)
+        ) as db:
+            db.execute("PRAGMA query_only=ON")
+            integrity = [row[0] for row in db.execute("PRAGMA quick_check")]
+            tables = {}
+            db.execute("BEGIN")
+            for (table,) in db.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+            ).fetchall():
+                quoted = '"' + table.replace('"', '""') + '"'
+                # Canonicalize rows independently of insertion/query order.
+                rows = sorted(
+                    json.dumps(
+                        row,
+                        default=lambda x: x.hex() if isinstance(x, bytes) else str(x),
+                        separators=(",", ":"),
+                        ensure_ascii=True,
+                    )
+                    for row in db.execute("SELECT * FROM " + quoted)
+                )
+                digest = hashlib.sha256()
+                for row in rows:
+                    digest.update(row.encode() + b"\n")
+                tables[table] = {"rows": len(rows), "sha256": digest.hexdigest()}
+            reports[name] = {
+                "status": "ok" if integrity == ["ok"] else "failed",
+                "integrity": integrity,
+                "tables": tables,
+            }
+    return {
+        "databases": reports,
+        "ok": reports["farm.sqlite3"]["status"] == "ok"
+        and all(v["status"] in {"ok", "missing"} for v in reports.values()),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "command",
         choices=[
+            "data-check",
+            "service-host",
+            "service-status",
+            "service-admin",
+            "protect-file",
             "configure",
             "serve",
             "backup",
@@ -550,7 +603,51 @@ def main():
     parser.add_argument("--input")
     parser.add_argument("--session")
     parser.add_argument("--config")
+    parser.add_argument("--service-name", default="CS2FarmAgent")
+    parser.add_argument("--enroll", action="store_true")
     args = parser.parse_args()
+    if args.command == "protect-file":
+        from security.credentials import restrict_path
+
+        restrict_path(Path(args.input))
+        print(json.dumps({"ok": True}))
+        return 0
+    if args.command in {"service-host", "service-status", "service-admin"}:
+        from agent import service_bridge
+
+        if args.command == "service-host":
+            service_bridge.host(args.service_name, args.enroll)
+            return 0
+        if args.command == "service-status":
+            print(json.dumps(service_bridge.status(args.service_name)))
+            return 0
+        try:
+            request = json.loads(Path(args.input).read_text(encoding="utf-8"))
+            Path(args.input).unlink()
+            action = request.get("action")
+            if action == "install":
+                base = (
+                    Path(sys.executable).parent
+                    if getattr(sys, "frozen", False)
+                    else ROOT
+                )
+                result = service_bridge.install(
+                    request.get("payload", {}), base, args.service_name
+                )
+            elif action == "applications":
+                result = service_bridge.applications(
+                    request.get("payload", {}), args.service_name
+                )
+            else:
+                result = service_bridge.control(action, args.service_name)
+            response = {"ok": True, "result": result}
+        except Exception as exc:
+            response = {
+                "ok": False,
+                "error": type(exc).__name__ + ": " + str(exc)[:2000],
+            }
+        Path(args.output).write_text(json.dumps(response), encoding="utf-8")
+        return 0 if response["ok"] else 1
     if args.command == "engine":
         from gameplay_test_engine.run import main as run_engine
 
@@ -626,6 +723,8 @@ def main():
         result = notifications_info(directory)
     elif args.command == "network-info":
         result = network_info(directory)
+    elif args.command == "data-check":
+        result = data_check(directory)
     elif args.command == "backup":
         result = backup(directory, args.output)
     elif args.command == "restore":

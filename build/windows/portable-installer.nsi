@@ -86,6 +86,12 @@ Section "Uninstall"
   SetShellVarContext current
   ExecWait '$\"$INSTDIR\${APP_EXE}$\" --shutdown'
   Sleep 10000
+  ; Optional protected SCM host must be removed before deleting its GUI controller.
+  ; UAC cancellation leaves the installation intact.
+  ExecWait '$\"$INSTDIR\${APP_EXE}$\" --remove-service' $0
+  ${If} $0 != 0
+    Abort "Windows service removal was not completed."
+  ${EndIf}
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   ; Remove only this product's login item; do not affect the other installation.

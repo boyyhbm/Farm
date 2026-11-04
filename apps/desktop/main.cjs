@@ -7,6 +7,8 @@ const os = require('node:os');
 const { pathToFileURL } = require('node:url');
 const { Supervisor, resolvePaths, readJson, ORIGIN } = require('./lib/supervisor.cjs');
 const { readConfig, saveConfig, validateSetup, parseEnrollment, httpsUrl, sanitize } = require('./lib/config.cjs');
+const { serviceStatus, serviceAdmin } = require('./lib/windows-service.cjs');
+const { diagnose } = require('./lib/diagnostics.cjs');
 const { checkUpdates, downloadUpdate } = require('./lib/updates.cjs');
 
 const productFile = path.join(process.resourcesPath || __dirname, 'product.json');
@@ -18,9 +20,9 @@ const smokeMode = process.argv.includes('--smoke-test');
 const smokeIndex = process.argv.indexOf('--result');
 const smokeResult = smokeIndex >= 0 ? process.argv[smokeIndex + 1] : null;
 let dataDir = process.env.FARM_DESKTOP_DATA_DIR || path.join(app.getPath('userData'), 'data');
-if (smokeMode) dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'farm-desktop-smoke-'));
+if (smokeMode) { const index = process.argv.indexOf('--smoke-data-dir'); dataDir = index >= 0 ? path.resolve(process.argv[index + 1]) : fs.mkdtempSync(path.join(os.tmpdir(), 'farm-desktop-smoke-')); }
 let management; let dashboard; let tray; let supervisor; let config; let quitting = false; let operation = false; let updateResult;
-let pendingEnrollment;
+let pendingEnrollment; let lastDiagnostics;
 const rendererPath = path.join(__dirname, 'renderer/index.html');
 const rendererUrl = pathToFileURL(rendererPath).toString();
 const localWebPreferences = { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true };
@@ -61,7 +63,7 @@ function installTray() {
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'Открыть Dashboard', click: () => openDashboard().catch(showError) },
     { label: 'Управление системой', click: showManagement },
-    { label: 'Перезапустить компоненты', click: () => guarded(() => supervisor.restart()).catch(showError) },
+    { label: 'Перезапустить компоненты', click: () => (config?.serviceMode ? serviceAdmin(supervisor, 'stop').then(() => serviceAdmin(supervisor, 'start')).then(refreshService) : guarded(() => supervisor.restart())).catch(showError) },
     { type: 'separator' }, { label: 'Выход', click: () => app.quit() },
   ]));
   tray.on('double-click', () => config?.mode === 'agent' ? showManagement() : openDashboard().catch(showError));
@@ -127,7 +129,7 @@ function createIpc() {
   });
   ipcMain.handle('farm:management', async (event, action, payload) => {
     if (!managementSender(event)) throw new Error('Untrusted management IPC sender');
-    const allowed = ['status', 'configure', 'open-dashboard', 'restart', 'backup', 'restore', 'preferences', 'check-updates', 'install-update', 'network-info', 'network-configure', 'notifications-info', 'notifications-configure', 'agent-applications-info', 'choose-agent-application', 'agent-applications-configure', 'diagnose', 'quit'];
+    const allowed = ['status', 'configure', 'open-dashboard', 'restart', 'backup', 'restore', 'preferences', 'check-updates', 'install-update', 'network-info', 'network-configure', 'notifications-info', 'notifications-configure', 'agent-applications-info', 'choose-agent-application', 'agent-applications-configure', 'diagnose', 'export-diagnostics', 'service-status', 'service-control', 'quit'];
     if (!allowed.includes(action)) throw new Error('Unknown desktop action');
     try {
       switch (action) {
@@ -136,7 +138,9 @@ function createIpc() {
           if (config) throw new Error('Первичная настройка уже выполнена.');
           const input = validateSetup(payload);
           if (product.agentOnly && input.mode !== 'agent') throw new Error('Этот установщик содержит только агент.');
-          if (input.mode !== 'remote') await supervisor.configure(input);
+          if (input.mode === 'agent' && input.serviceMode) {
+            await serviceAdmin(supervisor, 'install', { server_url: input.serverUrl, token: input.token, ...(input.ca_certificate ? { ca_certificate: input.ca_certificate } : {}) });
+          } else if (input.mode !== 'remote') await supervisor.configure(input);
           else {
             const response = await fetch(httpsUrl(input.serverUrl) + '/health/ready', { redirect: 'error', signal: AbortSignal.timeout(15000) });
             if (!response.ok) throw new Error(`Сервер не подтвердил готовность: HTTP ${response.status}`);
@@ -144,13 +148,15 @@ function createIpc() {
             if (health.status !== 'ready') throw new Error('Сервер не подтвердил готовность API.');
           }
           config = saveConfig(dataDir, input); setAutoStart(config.autoStart);
-          if (config.mode !== 'remote') await supervisor.start(config.mode);
+          if (config.mode !== 'remote' && !config.serviceMode) await supervisor.start(config.mode);
+          if (config.serviceMode) await refreshService();
           return state();
         });
         case 'open-dashboard': await openDashboard(); return state();
         case 'restart': return await guarded(async () => {
           if (!config || config.mode === 'remote') throw new Error('Удалённый сервер перезапускается его администратором.');
-          await supervisor.restart(); notify(app.getName(), 'Локальные компоненты перезапущены.'); return state();
+          if (config.serviceMode) { await serviceAdmin(supervisor, 'stop'); await serviceAdmin(supervisor, 'start'); await refreshService(); }
+          else await supervisor.restart(); notify(app.getName(), 'Локальные компоненты перезапущены.'); return state();
         });
         case 'backup': return await guarded(async () => {
           if (config?.mode !== 'server') throw new Error('Резервные копии доступны на главном компьютере.');
@@ -212,11 +218,30 @@ function createIpc() {
         case 'agent-applications-configure': return await guarded(async () => {
           if (config?.mode !== 'agent') throw new Error('Приложения настраиваются на компьютере агента.');
           const input = { steam_path: String(payload?.steam_path || ''), cs2_path: String(payload?.cs2_path || '') };
+          if (config.serviceMode) return await serviceAdmin(supervisor, 'applications', input);
           await supervisor.stop();
           try { return JSON.parse(await supervisor.runCommand(['agent-applications-configure', '--data-dir', dataDir], input)); }
           finally { await supervisor.start('agent'); }
         });
-        case 'diagnose': await supervisor.probe(); return state();
+        case 'service-status': return await refreshService();
+        case 'service-control': return await guarded(async () => {
+          if (config?.mode !== 'agent' || !config.serviceMode || !['start', 'stop', 'remove'].includes(payload?.action)) throw new Error('Недопустимое действие службы.');
+          const answer = await dialog.showMessageBox(management, { type: 'warning', message: payload.action === 'remove' ? 'Остановить и удалить службу Windows?' : 'Изменить состояние службы Windows?', detail: 'Windows запросит права администратора. При удалении службы защищённые данные подключения сохраняются.', buttons: ['Отмена', 'Продолжить'], defaultId: 0, cancelId: 0 });
+          if (answer.response !== 1) return { cancelled: true };
+          await serviceAdmin(supervisor, payload.action); return await refreshService();
+        });
+        case 'diagnose': return await guarded(async () => {
+          lastDiagnostics = await diagnose(supervisor, config, app.getVersion());
+          return { ...state(), diagnostics: lastDiagnostics };
+        });
+        case 'export-diagnostics': return await guarded(async () => {
+          if (!lastDiagnostics) lastDiagnostics = await diagnose(supervisor, config, app.getVersion());
+          const result = await dialog.showSaveDialog(management, { title: 'Сохранить диагностику', defaultPath: 'CS2-Farm-Diagnostics.json', filters: [{ name: 'Диагностика', extensions: ['json'] }] });
+          if (result.canceled) return { cancelled: true };
+          // Deliberately exclude config, credentials, request payloads and database values.
+          fs.writeFileSync(result.filePath, JSON.stringify(lastDiagnostics, null, 2), { mode: 0o600 });
+          return { saved: result.filePath };
+        });
         case 'check-updates': updateResult = await checkUpdates(product, app.getVersion()); return updateResult;
         case 'install-update': return await guarded(async () => {
           if (!updateResult?.available) throw new Error('Нет проверенного доступного обновления.');
@@ -232,11 +257,25 @@ function createIpc() {
     } catch (error) { supervisor.log('operation', error.message); throw new Error(sanitize(error.message)); }
   });
 }
+async function refreshService() {
+  const value = await serviceStatus(supervisor);
+  supervisor.mode = 'agent';
+  supervisor.state('agent', value.status === 'running' ? 'up' : value.status === 'stopped' ? 'stopped' : value.installed ? 'starting' : 'failed', `Windows Service: ${value.status}; автозапуск ${value.automatic_start ? 'включён' : 'не подтверждён'}. Подключение проверяйте в Nodes.`);
+  return { ...state(), windowsService: value };
+}
 async function smokeTest() {
   const report = { platform: process.platform, packaged: app.isPackaged, checkedAt: new Date().toISOString(), checks: [], passed: false };
   const check = name => report.checks.push({ name, passed: true });
   try {
     if (!smokeResult) throw new Error('--result absolute path is required');
+    if (process.argv.includes('--smoke-resume')) {
+      const before = JSON.parse(await supervisor.runCommand(['data-check', '--data-dir', dataDir]));
+      if (!before.ok || before.databases['farm.sqlite3'].tables.steam_accounts.rows < 1) throw new Error('No persisted account database to resume');
+      await supervisor.start('server'); check('existing_database_backend_queue_dashboard_start');
+      const win = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+      await win.loadURL(ORIGIN); check('existing_database_dashboard_browser_loaded'); win.destroy();
+      report.passed = true; return;
+    }
     const password = 'Smoke-' + crypto.randomBytes(20).toString('hex');
     await supervisor.configure({ mode: 'server', username: 'desktop-smoke', password }); check('packaged_runtime_configures_admin_and_database');
     await supervisor.start('server'); check('supervisor_backend_and_dashboard_healthy');
@@ -252,7 +291,11 @@ async function smokeTest() {
     await supervisor.restart(); check('supervisor_clean_restart');
     const stored = await fetch(`${ORIGIN}/api/v1/accounts/${account.id}`, { headers: { Cookie: cookie } });
     if (!stored.ok || (await stored.json()).id !== account.id) throw new Error('Persisted account not found after restart');
-    check('database_persists_after_restart'); win.destroy(); report.passed = true;
+    check('database_persists_after_restart');
+    const diagnostic = await diagnose(supervisor, { mode: 'server' }, app.getVersion());
+    if (!diagnostic.passed) throw new Error('Packaged GUI diagnosis failed: ' + JSON.stringify(diagnostic.checks));
+    check('graphical_self_diagnostics_all_automatic_checks');
+    win.destroy(); report.passed = true;
   } catch (error) { report.error = sanitize(error.message); }
   finally {
     await supervisor.stop();
@@ -277,12 +320,21 @@ if (requestLock) app.whenReady().then(async () => {
   supervisor = new Supervisor(paths);
   supervisor.on('status', value => { if (management && !management.isDestroyed()) management.webContents.send('farm:status', { ...value, configured: !!config, config }); });
   supervisor.on('failure', message => { notify('CS2 Farm Manager — ошибка', message); showManagement(); });
+  if (process.argv.includes('--remove-service')) {
+    try { const installedConfig = readConfig(dataDir); if (installedConfig?.serviceMode && (await serviceStatus(supervisor)).installed) await serviceAdmin(supervisor, 'remove'); app.exit(0); }
+    catch (error) { dialog.showErrorBox('Не удалось удалить службу', sanitize(error.message)); app.exit(1); }
+    return;
+  }
   if (smokeMode) { await smokeTest(); return; }
   installTray(); createIpc(); showManagement();
   try {
     config = readConfig(dataDir); setAutoStart(!!config?.autoStart);
     enrollmentFromArguments(process.argv);
-    if (config && config.mode !== 'remote') await supervisor.start(config.mode);
+    if (config && config.mode !== 'remote' && !config.serviceMode) await supervisor.start(config.mode);
+    if (config?.serviceMode) {
+      await refreshService();
+      const timer = setInterval(() => refreshService().catch(showError), 10000); timer.unref();
+    }
     if (config && config.mode !== 'agent') await openDashboard();
   } catch (error) { showError(error); }
 }).catch(error => { if (smokeResult) fs.writeFileSync(smokeResult, JSON.stringify({ passed: false, error: sanitize(error.message) })); else dialog.showErrorBox('CS2 Farm Manager — ошибка запуска', sanitize(error.message)); app.exit(1); });
