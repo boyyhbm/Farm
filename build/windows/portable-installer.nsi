@@ -90,15 +90,36 @@ Section "Uninstall"
   ; UAC cancellation leaves the installation intact.
   ExecWait '$\"$INSTDIR\${APP_EXE}$\" --remove-service' $0
   ${If} $0 != 0
+    SetErrorLevel $0
     Abort "Windows service removal was not completed."
   ${EndIf}
+  ; Windows can retain image mappings briefly after the application's main
+  ; process exits. Retry only this installation; never delete an entry from
+  ; Windows Settings while the executable is still present.
+  SetOutPath "$TEMP"
+  StrCpy $1 0
+  remove_program_files:
+  ClearErrors
+  RMDir /r "$INSTDIR"
+  IfFileExists "$INSTDIR\${APP_EXE}" removal_pending removal_complete
+  removal_pending:
+  IntOp $1 $1 + 1
+  ${If} $1 < 30
+    Sleep 1000
+    Goto remove_program_files
+  ${EndIf}
+  SetErrorLevel 5
+  IfSilent removal_failed
+  MessageBox MB_OK|MB_ICONEXCLAMATION "Windows is still holding application files. Close this application's windows and retry removal from Windows Settings. Your data and uninstall entry were preserved."
+  removal_failed:
+  Abort "Application files are still in use."
+  removal_complete:
   Delete "$DESKTOP\${PRODUCT_NAME}.lnk"
   Delete "$SMPROGRAMS\${PRODUCT_NAME}.lnk"
   ; Remove only this product's login item; do not affect the other installation.
   DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCT_NAME}"
   DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}"
   DeleteRegKey HKCU "Software\${APP_ID}"
-  RMDir /r "$INSTDIR"
   IfSilent keep_user_data
   MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "Also delete local settings and database for ${PRODUCT_NAME}? This cannot be undone." IDNO keep_user_data
   RMDir /r "$APPDATA\${PRODUCT_NAME}"

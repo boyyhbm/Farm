@@ -139,7 +139,13 @@ try {
         Wait-ProcessResult $Uninstaller.FullName @('/S') 120
         $RemoveDeadline = (Get-Date).AddSeconds(30)
         while ((Test-Path $Exe) -and (Get-Date) -lt $RemoveDeadline) { Start-Sleep -Milliseconds 500 }
-        Record "${Product}_program_removed" (!(Test-Path $Exe))
+        $RemovalDetails = ''
+        if (Test-Path $Exe) {
+            $RemainingProcesses = @(Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and $_.ExecutablePath.StartsWith($InstallDir,[StringComparison]::OrdinalIgnoreCase) } | Select-Object Name,ProcessId,ParentProcessId,ExecutablePath)
+            $RemainingFiles = @(Get-ChildItem $InstallDir -File | Select-Object Name,Length,Attributes)
+            $RemovalDetails = @{processes=$RemainingProcesses; files=$RemainingFiles} | ConvertTo-Json -Depth 4 -Compress
+        }
+        Record "${Product}_program_removed" (!(Test-Path $Exe)) $RemovalDetails
     }
     $Report.passed = $true
 } catch {
