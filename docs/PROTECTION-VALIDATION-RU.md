@@ -1,7 +1,7 @@
 # Проверка Protection 0.3.0 — 4 ноября 2026
 
 Исходники проверенных установщиков: `d71402bd34569fe4dd2e5b1db44c1cfba58baa1e`.
-[Полный Windows CI](https://github.com/boyyhbm/Farm/actions/runs/41892308025) завершился **success**. [Машинный отчёт](protection-validation.json), [руководство модуля](PROTECTION-RU.md), [проверки для вашего ПК](WINDOWS-LOCAL-CHECKLIST-RU.md).
+[Полный Windows CI](https://github.com/boyyhbm/Farm/actions/runs/41892308025) завершился **success**. [Машинный отчёт](protection-validation-0.3.0.json), [руководство модуля](PROTECTION-RU.md), [проверки для вашего ПК](WINDOWS-LOCAL-CHECKLIST-RU.md).
 
 ## Фактически выполнено
 

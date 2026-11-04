@@ -1,29 +1,30 @@
 {
-  "source_commit": "d71402bd34569fe4dd2e5b1db44c1cfba58baa1e",
-  "version": "0.3.0",
+  "version": "0.4.0",
+  "engine_version": "2.0",
+  "source_commit": "8063127f52af7c9a76851646a984cabfbb305d53",
   "checked_at": "2026-11-04",
   "local": {
-    "python_full_suite": {
-      "passed": 105,
+    "full_python_suite": {
+      "passed": 136,
       "skipped": 1,
-      "duration_seconds": 42.29,
-      "skip_reason": "Windows SCM integration requires Windows"
+      "duration_seconds": 43.47,
+      "scope": "real PostgreSQL/Redis integration plus isolated Python/SQLite tests; Windows SCM skipped on Linux"
     },
-    "protection_logic": {
-      "passed": 18,
-      "duration_seconds": 2.04,
-      "steam_adapter": "explicit httpx.MockTransport in tests only"
+    "final_health_source_tests": {
+      "passed": 30,
+      "duration_seconds": 1.6
     },
     "desktop_node": {
       "passed": 13,
       "failed": 0
     },
-    "dashboard_production_build": "passed",
     "typescript": "passed",
+    "next_production_build": "passed",
     "browser": {
-      "checked_at": "2026-11-04T18:56:56.800Z",
+      "checked_at": "2026-11-04T22:19:14.182Z",
       "sections": 12,
       "protection_manual_hold_history_and_release": true,
+      "protection_v2_health_evidence_policy_and_csv_export": true,
       "system_management_status": true,
       "system_management_diagnostics": true,
       "account_create_edit_delete": true,
@@ -31,25 +32,24 @@
       "pageErrors": [],
       "apiFailures": []
     },
-    "postgresql_migration": {
-      "postgresql_upgrade_0002_to_0003": true,
+    "postgresql_migrations": {
+      "postgresql_upgrade_0002_to_0005": true,
       "existing_account_preserved": true,
       "downgrade_and_reupgrade": true,
       "partial_unique_index_created": true
-    },
-    "sqlite_migration_0002_to_0003": "passed; existing account and administrator hash preserved"
+    }
   },
   "windows_ci": {
-    "run_id": 41892308025,
-    "url": "https://github.com/boyyhbm/Farm/actions/runs/41892308025",
+    "run_id": 41934955027,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41934955027",
     "status": "completed",
     "conclusion": "success",
     "os": "Windows Server 2022 x64",
     "source_overlay": false,
     "python": {
-      "passed": 93,
+      "passed": 124,
       "skipped": 1,
-      "duration_seconds": 52.456,
+      "duration_seconds": 71.226,
       "skip_reason": "non-Windows platform rejection contract"
     },
     "desktop_node": {
@@ -61,65 +61,57 @@
       "failed": 0
     },
     "manager_checks": {
-      "passed": 8,
+      "passed": 9,
       "failed": 0,
-      "protection_api_and_page": true
+      "packaged_engine_v2_and_integrity": true
     },
     "two_scm_agents": {
       "scenarios_passed": 1,
       "skipped": 0,
-      "duration_seconds": 184.452,
+      "duration_seconds": 236.952,
       "physical_hosts": 1,
       "service_instances": 2,
       "tls_and_telemetry": true,
-      "parallel_tasks_stop_rotation_offline_unknown_recovery": true
+      "parallel_tasks_stop_rotation_offline_unknown_recovery": true,
+      "local_hold_persists_after_service_restart": true,
+      "unaffected_node_continues_test_work": true,
+      "agent_integrity_report_observed": true,
+      "reviewed_release_with_real_ack": true
     }
+  },
+  "earlier_complete_engine2_validation": {
+    "run_id": 41924517752,
+    "conclusion": "success",
+    "source_commit": "706dcb43c59beae78a1342075624e274b1197e08",
+    "python_passed": 124,
+    "python_skipped": 1,
+    "node_passed": 13,
+    "installer_checks_passed": 22,
+    "manager_checks_passed": 9,
+    "scm_scenarios_passed": 1,
+    "scm_seconds": 213.588,
+    "services": 2,
+    "physical_hosts": 1
   },
   "unverified": [
-    "Clean Windows 11/10 installation and interactive UAC/SmartScreen",
-    "Actual OS reboot",
-    "Two physical additional Windows PCs",
-    "Upgrade from an earlier EXE version (schema upgrade and same-version reinstall checked separately)",
-    "Live Steam GetPlayerBans with an administrator API key",
-    "Telegram delivery to an administrator chat"
+    "Clean Windows 10/11 without preinstalled developer runtimes",
+    "Actual OS reboot and interactive UAC/SmartScreen",
+    "Two physical additional PCs",
+    "Upgrade from the previously released EXE version; old-schema migration and same-version reinstall are tested separately",
+    "Live Steam GetPlayerBans with a real administrator key",
+    "Real Telegram delivery",
+    "Physical CPU/GPU thermal faults; injected faults are covered by tests",
+    "Signed publisher build and authenticated game-wide baseline"
   ],
   "prediction_available": false,
+  "production_mock_adapter": false,
   "artifact_provenance": {
-    "artifact_id": 13355207474,
-    "url": "https://github.com/boyyhbm/Farm/actions/runs/41892308025/artifacts/13355207474",
-    "archive_sha256": "56fd1d41d2c41a34286a59f9c39fc5e4f72f66eeff32259c56d7fcd7dc63c516",
+    "artifact_id": 13374681264,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41934955027/artifacts/13374681264",
+    "archive_sha256": "efe50748e3efbe5b037598d5c050377659d5d827c60de3519a4639fd33ffadd5",
     "native_exe_hashes": "build-manifest.json; export workflow verifies each EXE before release upload",
-    "signed": false
-  },
-  "artifacts": {
-    "CS2-Farm-Agent-Setup.exe": {
-      "size_bytes": 204238876,
-      "sha256": "05595fbec4cacb21ece7fb47171f3e5be919de68227f8d709748a03aa17e281f"
-    },
-    "CS2-Farm-Manager-Setup.exe": {
-      "size_bytes": 447856754,
-      "sha256": "ed72de71fe86b59b42f25041f11f0f50ef1ceb7401a96ca7bb77d0c8989c1033"
-    }
-  },
-  "release": {
-    "draft": true,
-    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-225b7c9a14d04c106e54",
-    "export_workflow": "https://github.com/boyyhbm/Farm/actions/runs/41894710135"
-  },
-  "local_installer_verification": {
-    "downloaded_exact_native_bytes": true,
-    "sha256_matches_native_manifest": true,
-    "nsis_crc_and_pe_valid": true,
-    "windows_executed_here": false
-  },
-  "native_signatures": {
-    "CS2-Farm-Manager-Setup.exe": {
-      "status": "NotSigned",
-      "signer": null
-    },
-    "CS2-Farm-Agent-Setup.exe": {
-      "status": "NotSigned",
-      "signer": null
-    }
+    "signed": false,
+    "verification_artifact_id": 13374960749,
+    "verification_archive_sha256": "2a454bd0588bb6e0cb8d42d1eb9ee6209dccc767eccac55cd6a43d94c0cb182b"
   }
 }

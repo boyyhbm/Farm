@@ -1,0 +1,2 @@
+# Preserve exported CSV content while normalizing its text line endings in Git.
+tests/e2e/artifacts/*.csv text eol=lf
