@@ -38,8 +38,12 @@ async def test_real_child_launch_replay_and_completion(tmp_path):
     assert first["status"] == "RUNNING"
     assert first == second
     assert len(agent.store.processes()) == 1
-    await asyncio.sleep(0.5)
-    results = agent.processes.poll()
+    results = []
+    for _ in range(80):
+        await asyncio.sleep(0.1)
+        results = agent.processes.poll()
+        if results:
+            break
     assert len(results) == 1
     assert results[0]["status"] == "STOPPED", results
     assert results[0]["resource_usage"]["synthetic"] is True

@@ -88,8 +88,15 @@ class ProcessManager:
                 from process_manager.windows import launch_interactive
                 proc = launch_interactive(argv)
             else:
+                environment = os.environ.copy()
+                if kind == "test" and not getattr(sys, "frozen", False):
+                    import gameplay_test_engine
+                    # A source runner may use relative PYTHONPATH entries. The child
+                    # has a different cwd; resolve the engine from the loaded package.
+                    engine_root = str(Path(gameplay_test_engine.__file__).resolve().parent.parent)
+                    environment["PYTHONPATH"] = engine_root
                 proc = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=log, stderr=log,
-                                        shell=False, cwd=str(Path(__file__).resolve().parents[1]) if kind == "test" else None, creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW) if os.name == "nt" else 0)
+                                        shell=False, env=environment, cwd=str(Path(__file__).resolve().parents[1]) if kind == "test" else None, creationflags=(subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW) if os.name == "nt" else 0)
             if os.name == "nt":
                 from process_manager.windows import attach_job
                 self.jobs[session_id] = attach_job(proc.pid)
@@ -179,7 +186,11 @@ class ProcessManager:
                         stream.seek(0, 2)
                         stream.seek(max(0, stream.tell() - 8192))
                         line = stream.read().decode(errors="replace").strip().splitlines()[-1]
-                    event["resource_usage"] = json.loads(line)
+                    try:
+                        event["resource_usage"] = json.loads(line)
+                    except ValueError:
+                        if exit_code != 0:
+                            event["error"] += ": " + line[:1000]
                 except (OSError, ValueError, IndexError):
                     pass
             events.append(event)
