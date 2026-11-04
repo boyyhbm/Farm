@@ -434,7 +434,13 @@ def serve(directory, origin, port):
     async def run_servers():
         servers = [
             uvicorn.Server(
-                uvicorn.Config(app, host="127.0.0.1", port=port, log_level="info")
+                uvicorn.Config(
+                    app,
+                    host="127.0.0.1",
+                    port=port,
+                    log_level="info",
+                    timeout_graceful_shutdown=5,
+                )
             )
         ]
         if info.get("enabled"):
@@ -452,6 +458,7 @@ def serve(directory, origin, port):
                         ssl_keyfile=str(directory / "tls/server.key"),
                         ssl_keyfile_password=password,
                         log_level="info",
+                        timeout_graceful_shutdown=5,
                     )
                 )
             )

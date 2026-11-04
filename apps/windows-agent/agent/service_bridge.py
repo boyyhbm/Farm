@@ -145,6 +145,13 @@ def _wait(service, expected, timeout=40):
     )
 
 
+def _remove_runtime(name):
+    target, _ = paths(name)
+    if target.parent.exists():
+        _reject_reparse(target.parent)
+        shutil.rmtree(target.parent)
+
+
 def control(action, name="CS2FarmAgent"):
     _windows(admin=True)
     _name(name)
@@ -162,6 +169,8 @@ def control(action, name="CS2FarmAgent"):
             )
         except pywintypes.error as exc:
             if exc.winerror == 1060:
+                if action == "remove":
+                    _remove_runtime(name)
                 return {"installed": False, "status": "not_installed", "name": name}
             raise
         state = win32service.QueryServiceStatus(service)[1]
@@ -187,6 +196,8 @@ def control(action, name="CS2FarmAgent"):
         if service:
             win32service.CloseServiceHandle(service)
         win32service.CloseServiceHandle(scm)
+    if action == "remove":
+        _remove_runtime(name)
     return (
         {"installed": False, "status": "removed", "name": name}
         if action == "remove"

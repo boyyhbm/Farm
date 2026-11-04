@@ -392,12 +392,25 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
             print("WINDOWS_CHECK service runtime replacement preserves identities")
             assert client.get("/api/v1/logs").json()["total"] > 0
     finally:
+        import sys
+
+        original_failure = sys.exc_info()[0] is not None
+        cleanup_errors = []
         for name in reversed(installed):
             try:
                 service(name, "remove")
-            except Exception:  # noqa: BLE001 - best-effort cleanup preserves original failure
+                remaining = invoke("service-status", extra=("--service-name", name))
+                assert not remaining["installed"]
+                runtime_parent = (
+                    Path(os.environ["ProgramFiles"]) / "CS2FarmAgent" / name
+                )
+                assert not runtime_parent.exists(), (
+                    "Protected executable payload was not removed"
+                )
+            except Exception as exc:  # noqa: BLE001 - best-effort cleanup preserves original failure
                 # Preserve original failure while leaving cleanup evidence in CI output.
-                print("SCM cleanup failed for " + name)
+                cleanup_errors.append(name + ": " + str(exc))
+                print("SCM cleanup failed for " + name + ": " + str(exc))
         if server and server.poll() is None:
             server.stdin.write(b"shutdown\n")
             server.stdin.flush()
@@ -407,3 +420,5 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 server.kill()
                 server.wait(timeout=5)
         logs.close()
+        if cleanup_errors and not original_failure:
+            pytest.fail("SCM cleanup failed: " + "; ".join(cleanup_errors))

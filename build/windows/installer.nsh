@@ -2,7 +2,7 @@
 ; No firewall rule, Defender exception, certificate-store change or SmartScreen bypass is installed.
 !macro customUnInstall
   ExecWait '$\"$INSTDIR\${APP_EXECUTABLE_FILENAME}$\" --shutdown'
-  Sleep 10000
+  Sleep 20000
   ExecWait '$\"$INSTDIR\${APP_EXECUTABLE_FILENAME}$\" --remove-service' $0
   ${If} $0 != 0
     Abort "Windows service removal was not completed."

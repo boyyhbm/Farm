@@ -239,7 +239,9 @@ class Supervisor extends EventEmitter {
     // Runtime reads shutdown from the inherited private stdin pipe on Windows too.
     if (child.stdin && !child.stdin.destroyed && (this.children.get('backend') === child || this.children.get('agent') === child)) child.stdin.end('shutdown\n');
     else child.kill('SIGTERM');
-    const stopped = await Promise.race([exited.then(() => true), wait(8000).then(() => false)]);
+    let deadline;
+    const stopped = await Promise.race([exited.then(() => true), new Promise(resolve => { deadline = setTimeout(() => resolve(false), 15000); })]);
+    clearTimeout(deadline);
     if (!stopped) {
       if (process.platform === 'win32') await new Promise(resolve => {
         const killer = spawn('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' });

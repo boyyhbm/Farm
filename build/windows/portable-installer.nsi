@@ -64,7 +64,7 @@ Section "${PRODUCT_NAME}" MainSection
   SetShellVarContext current
   IfFileExists "$INSTDIR\${APP_EXE}" 0 install_files
   ExecWait '$\"$INSTDIR\${APP_EXE}$\" --shutdown'
-  Sleep 10000
+  Sleep 20000
   install_files:
   SetOutPath "$INSTDIR"
   File /r "${APP_FILES}"
@@ -85,7 +85,7 @@ SectionEnd
 Section "Uninstall"
   SetShellVarContext current
   ExecWait '$\"$INSTDIR\${APP_EXE}$\" --shutdown'
-  Sleep 10000
+  Sleep 20000
   ; Optional protected SCM host must be removed before deleting its GUI controller.
   ; UAC cancellation leaves the installation intact.
   ExecWait '$\"$INSTDIR\${APP_EXE}$\" --remove-service' $0

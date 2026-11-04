@@ -115,7 +115,8 @@ try {
                 $OverlayTarget = Join-Path $InstallDir 'resources\runtime\farm-runtime\agent\service_bridge.py'
                 if (!(Test-Path $OverlayTarget)) { throw 'Diagnostic source overlay requires embedded runtime.' }
                 Copy-Item apps/windows-agent/agent/service_bridge.py $OverlayTarget -Force
-                Write-Output 'DIAGNOSTIC SOURCE OVERLAY: testing checkout service_bridge.py with real installed bundled interpreter; this is not immutable installer verification.'
+                Copy-Item apps/api/desktop_entry.py (Join-Path $InstallDir 'resources\runtime\farm-runtime\desktop_entry.py') -Force
+                Write-Output 'DIAGNOSTIC SOURCE OVERLAY: testing checkout service_bridge.py and desktop_entry.py with real installed bundled interpreter; this is not immutable installer verification.'
             }
             # GUI must open from the installed Agent product without developer runtimes.
             $RuntimeArguments = @($BundledRuntime.arguments) + @('--help')

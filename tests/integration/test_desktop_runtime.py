@@ -341,6 +341,33 @@ def test_graphical_runtime_secure_listener_and_real_agent(tmp_path, monkeypatch)
                     break
                 time.sleep(0.3)
             assert jobs[0]["status"] == "COMPLETED", jobs
+            previous_heartbeat = client.get(
+                "/api/v1/nodes/" + enrolled["node_id"]
+            ).json()["last_heartbeat"]
+            runtime_args = runtime.args
+            runtime.stdin.write(b"shutdown\n")
+            runtime.stdin.flush()
+            runtime.wait(timeout=20)
+            runtime = subprocess.Popen(
+                runtime_args, stdin=subprocess.PIPE, stdout=log, stderr=log, cwd=ROOT
+            )
+            for _ in range(250):
+                try:
+                    response = client.get("/api/v1/nodes/" + enrolled["node_id"])
+                    if response.status_code == 200:
+                        restarted = response.json()
+                        if (
+                            restarted["status"] == "online"
+                            and restarted["last_heartbeat"] != previous_heartbeat
+                        ):
+                            break
+                except httpx.HTTPError:
+                    pass
+                time.sleep(0.1)
+            else:
+                raise AssertionError(
+                    "Live TLS agent did not reconnect after bounded server shutdown"
+                )
             client.post("/api/v1/nodes/" + enrolled["node_id"] + "/revoke")
     finally:
         for process, output in ((agent, agent_log), (runtime, log)):
