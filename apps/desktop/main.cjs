@@ -8,7 +8,7 @@ const { pathToFileURL } = require('node:url');
 const { Supervisor, resolvePaths, readJson, ORIGIN } = require('./lib/supervisor.cjs');
 const { readConfig, saveConfig, validateSetup, parseEnrollment, httpsUrl, sanitize } = require('./lib/config.cjs');
 const { serviceStatus, serviceAdmin } = require('./lib/windows-service.cjs');
-const { diagnose } = require('./lib/diagnostics.cjs');
+const { diagnose, explain } = require('./lib/diagnostics.cjs');
 const { checkUpdates, downloadUpdate } = require('./lib/updates.cjs');
 
 const productFile = path.join(process.resourcesPath || __dirname, 'product.json');
@@ -261,7 +261,7 @@ function createIpc() {
         });
         case 'quit': app.quit(); return { quitting: true };
       }
-    } catch (error) { supervisor.log('operation', error.message); throw new Error(sanitize(error.message)); }
+    } catch (error) { supervisor.log('operation', error.message); const issue = explain(error); throw new Error(`${issue.title} [${issue.code}]\n${issue.detail}\nЧто делать: ${issue.remedy}`); }
   });
 }
 async function refreshService() {

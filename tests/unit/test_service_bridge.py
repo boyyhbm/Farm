@@ -82,3 +82,25 @@ def test_protected_runtime_refresh_rolls_back_and_preserves_credentials(
     assert (data / "credentials.dat").read_bytes() == b"unchanged-dpapi"
     assert not target.with_name("runtime.new").exists()
     assert not target.with_name("runtime.previous").exists()
+
+
+def test_directory_acl_grants_are_inherited_by_files_not_stripped_recursively(
+    tmp_path, monkeypatch
+):
+    calls = []
+    monkeypatch.setattr(bridge.subprocess, "CREATE_NO_WINDOW", 0, raising=False)
+    monkeypatch.setattr(
+        bridge.subprocess, "run", lambda args, **kwargs: calls.append(args)
+    )
+    bridge._protect(tmp_path, readable=True)
+    grants, owner = calls
+    assert "/inheritance:r" in grants
+    assert (
+        "/T" not in grants
+    )  # directory-only ACE flags must not leave files with empty DACLs
+    assert "*S-1-5-18:(OI)(CI)F" in grants
+    assert "*S-1-5-32-544:(OI)(CI)F" in grants
+    assert "*S-1-5-32-545:(OI)(CI)RX" in grants
+    assert (
+        "/T" in owner
+    )  # an unprivileged original owner cannot rewrite SYSTEM-executed code

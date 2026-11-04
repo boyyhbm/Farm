@@ -70,6 +70,11 @@ async function diagnose(supervisor, config, version) {
       if (mode === 'agent' && fs.existsSync(file)) ca = fs.readFileSync(file, 'utf8');
       await tlsHealth(config?.serverUrl, ca); return 'HTTPS: сертификат, имя сервера и готовность API подтверждены';
     });
+    if (mode === 'agent' && config?.serviceMode) await record('windows-service', 'Фоновая служба Windows', async () => {
+      const service = JSON.parse(await supervisor.runCommand(['service-status']));
+      if (!service.installed || service.status !== 'running') throw new Error(`Windows Service: ${service.status}`);
+      return `SCM подтвердил RUNNING; автозапуск ${service.automatic_start ? 'включён' : 'выключен'}`;
+    });
     if (mode === 'agent') checks.push({ id: 'heartbeat', title: 'Heartbeat агента', status: 'manual', detail: 'Подтверждается на сервере в Nodes по времени последнего heartbeat. Работа процесса сама по себе не означает online.' });
   }
   return { checkedAt: new Date().toISOString(), version, platform: process.platform, mode, checks, passed: checks.every(check => check.status !== 'failed') };

@@ -43,18 +43,27 @@ def _windows(admin=False):
         raise PermissionError("Administrator confirmation is required")
 
 
-def _protect(path, readable=False):
+def _protect(path, readable=False, recursive_owner=True):
     flags = ["*S-1-5-18:(OI)(CI)F", "*S-1-5-32-544:(OI)(CI)F"]
     if readable:
         flags.append("*S-1-5-32-545:(OI)(CI)RX")
     subprocess.run(
-        ["icacls", str(path), "/inheritance:r", "/grant:r", *flags, "/T", "/C"],
+        # Set inheritable ACEs on the directory. Applying /inheritance:r /T
+        # also strips file ACEs, since (OI)(CI) grants are directory-only.
+        ["icacls", str(path), "/inheritance:r", "/grant:r", *flags, "/C"],
         check=True,
         capture_output=True,
         creationflags=subprocess.CREATE_NO_WINDOW,
     )
     subprocess.run(
-        ["icacls", str(path), "/setowner", "*S-1-5-32-544", "/T", "/C"],
+        [
+            "icacls",
+            str(path),
+            "/setowner",
+            "*S-1-5-32-544",
+            *(["/T"] if recursive_owner else []),
+            "/C",
+        ],
         check=True,
         capture_output=True,
         creationflags=subprocess.CREATE_NO_WINDOW,
@@ -243,7 +252,8 @@ def install(payload, source_root, name="CS2FarmAgent"):
             control("start", name)
         return {**status(name), "node_id": enrolled["node_id"], "reused_identity": True}
     target.parent.mkdir(parents=True, exist_ok=True)
-    _protect(target.parent, readable=True)
+    _protect(target.parent.parent, readable=True, recursive_owner=False)
+    _protect(target.parent, readable=True, recursive_owner=False)
     if target.exists():
         shutil.rmtree(target)
     shutil.copytree(source_root, target)
