@@ -24,7 +24,10 @@ OUT = ROOT / "artifacts/windows"
 
 
 def run(args, env=None):
-    subprocess.run([str(a) for a in args], cwd=ROOT, env=env, check=True)
+    argv = [str(a) for a in args]
+    # Windows CreateProcess does not search PATHEXT for npm.cmd.
+    argv[0] = shutil.which(argv[0]) or argv[0]
+    subprocess.run(argv, cwd=ROOT, env=env, check=True)
 
 
 def download(url, target, sha256):
