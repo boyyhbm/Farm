@@ -267,8 +267,14 @@ def install(payload, source_root, name="CS2FarmAgent"):
                 None,
                 None,
             )
-            win32service.StartService(temporary, None)
-            _wait(temporary, win32service.SERVICE_STOPPED, 90)
+            try:
+                win32service.StartService(temporary, None)
+                _wait(temporary, win32service.SERVICE_STOPPED, 90)
+            except OSError as exc:
+                detail = data / "service-error.json"
+                if detail.exists():
+                    raise RuntimeError(json.loads(detail.read_text())["error"]) from exc
+                raise
             if not result.exists():
                 raise RuntimeError("SYSTEM enrollment did not return a result")
             enrolled = json.loads(result.read_text())

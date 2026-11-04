@@ -205,6 +205,7 @@ function createIpc() {
         });
         case 'agent-applications-info': {
           if (config?.mode !== 'agent') throw new Error('Приложения настраиваются на компьютере агента.');
+          if (config.serviceMode) return await guarded(() => serviceAdmin(supervisor, 'applications-info'));
           return JSON.parse(await supervisor.runCommand(['agent-applications-info', '--data-dir', dataDir]));
         }
         case 'choose-agent-application': {

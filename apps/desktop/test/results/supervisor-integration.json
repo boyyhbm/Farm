@@ -1,5 +1,5 @@
 {
-  "checkedAt": "2026-11-03T19:34:22.632Z",
+  "checkedAt": "2026-11-04T01:34:35.140Z",
   "environment": "Real Node supervisor, Python API, SQLite durable queue and production Next standalone on linux; not an Electron or Windows installer test",
   "checks": [
     {

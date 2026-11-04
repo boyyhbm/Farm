@@ -616,7 +616,18 @@ def main():
         from agent import service_bridge
 
         if args.command == "service-host":
-            service_bridge.host(args.service_name, args.enroll)
+            try:
+                service_bridge.host(args.service_name, args.enroll)
+            except Exception as exc:  # noqa: BLE001 - service has no interactive stderr
+                _, service_data = service_bridge.paths(args.service_name)
+                if service_data.is_dir():
+                    (service_data / "service-error.json").write_text(
+                        json.dumps(
+                            {"error": type(exc).__name__ + ": " + str(exc)[:2000]}
+                        ),
+                        encoding="utf-8",
+                    )
+                raise
             return 0
         if args.command == "service-status":
             print(json.dumps(service_bridge.status(args.service_name)))
@@ -634,6 +645,11 @@ def main():
                 result = service_bridge.install(
                     request.get("payload", {}), base, args.service_name
                 )
+            elif action == "applications-info":
+                from agent.desktop import get_applications
+
+                service_bridge._windows(admin=True)
+                result = get_applications(service_bridge.paths(args.service_name)[1])
             elif action == "applications":
                 result = service_bridge.applications(
                     request.get("payload", {}), args.service_name

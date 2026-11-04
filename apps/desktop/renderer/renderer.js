@@ -46,7 +46,7 @@ function renderStatus(value) {
   $('data-directory').textContent = 'Данные: ' + (state.dataDirectory || 'неизвестно');
   $('network-panel').hidden = state.config?.mode !== 'server';
   $('notifications-panel').hidden = state.config?.mode !== 'server';
-  $('agent-applications-panel').hidden = state.config?.mode !== 'agent' || !!state.config?.serviceMode;
+  $('agent-applications-panel').hidden = state.config?.mode !== 'agent';
   $('windows-service-panel').hidden = !state.config?.serviceMode;
   if (value.windowsService) $('windows-service-state').textContent = `Состояние: ${value.windowsService.status}. Автозапуск: ${value.windowsService.automatic_start ? 'да' : 'не подтверждён'}.`;
   $('backup').disabled = busy || state.config?.mode !== 'server';

@@ -67,7 +67,7 @@ Section "${PRODUCT_NAME}" MainSection
   Sleep 10000
   install_files:
   SetOutPath "$INSTDIR"
-  File /r "${APP_DIR}/*"
+  File /r "${APP_FILES}"
   WriteUninstaller "$INSTDIR\Uninstall ${PRODUCT_NAME}.exe"
   WriteRegStr HKCU "Software\${APP_ID}" "InstallDir" "$INSTDIR"
   WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_ID}" "DisplayName" "${PRODUCT_NAME}"
