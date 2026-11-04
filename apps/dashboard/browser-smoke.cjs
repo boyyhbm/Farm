@@ -121,6 +121,49 @@ const env = Object.fromEntries(
     .getByRole("button", { name: "Защита", exact: true })
     .click();
   await page.getByRole("heading", { name: "Защита", exact: true }).waitFor();
+  const engine = page.getByRole("region", {
+    name: "Farm Protection Engine 2.0",
+    exact: true,
+  });
+  await engine
+    .getByRole("heading", { name: "Account Health", exact: true })
+    .waitFor();
+  await engine.getByRole("button", { name: "Объяснение", exact: true }).click();
+  await engine
+    .getByRole("heading", { name: "Обоснование состояния", exact: true })
+    .waitFor();
+  await engine.getByRole("button", { name: "Закрыть", exact: true }).click();
+  await engine
+    .getByRole("button", { name: "Изменить политику", exact: true })
+    .click();
+  await page
+    .locator("textarea[name=note]")
+    .fill("Browser E2E explicit policy review");
+  await page.locator("input[name=confirmed]").check();
+  await page
+    .getByRole("button", { name: "Confirm / Подтвердить", exact: true })
+    .click();
+  await page.getByRole("dialog").waitFor({ state: "hidden" });
+  const reportDownload = page.waitForEvent("download");
+  await engine
+    .getByRole("button", { name: "CSV", exact: true })
+    .first()
+    .click();
+  const report = await reportDownload;
+  await report.saveAs(
+    path.join(__dirname, "../../tests/e2e/artifacts/protection-health.csv"),
+  );
+  if (
+    !fs
+      .readFileSync(
+        path.join(__dirname, "../../tests/e2e/artifacts/protection-health.csv"),
+        "utf8",
+      )
+      .includes("76561199999888881")
+  )
+    throw new Error(
+      "Health report does not contain the real test database account",
+    );
   const riskRow = page
     .getByRole("row")
     .filter({ hasText: "76561199999888881" });
@@ -196,6 +239,7 @@ const env = Object.fromEntries(
     checked_at: new Date().toISOString(),
     sections: 12,
     protection_manual_hold_history_and_release: true,
+    protection_v2_health_evidence_policy_and_csv_export: true,
     system_management_status: true,
     system_management_diagnostics: true,
     account_create_edit_delete: true,

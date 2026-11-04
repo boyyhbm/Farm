@@ -160,21 +160,42 @@ async def lifespan(app):
             await asyncio.to_thread(worker.stop)
 
 
-app = FastAPI(title="CS2 Farm Manager", version="0.3.0", lifespan=lifespan)
+app = FastAPI(title="CS2 Farm Manager", version="0.4.0", lifespan=lifespan)
 
 
 from app.api_protection import router as protection_router
 from app.services.compliance import ProtectionDenied
+
 app.include_router(protection_router)
+from app.api_safety import router as safety_router
+
+app.include_router(safety_router)
+
 
 @app.exception_handler(ProtectionDenied)
 async def protection_denied(request, exc):
     from app.services.protection import incident
+
     with SessionLocal() as db:
-        incident(db, exc.code, 'CRITICAL' if exc.code=='CONFIRMED_RESTRICTION' else 'HIGH', account_id=exc.account_id,node_id=exc.node_id,source='compliance')
-        audit(db,getattr(getattr(request.state,'user',None),'username','operator'),'protection.operation_denied',exc.account_id or '',{'code':exc.code})
+        incident(
+            db,
+            exc.code,
+            "CRITICAL" if exc.code == "CONFIRMED_RESTRICTION" else "HIGH",
+            account_id=exc.account_id,
+            node_id=exc.node_id,
+            source="compliance",
+        )
+        audit(
+            db,
+            getattr(getattr(request.state, "user", None), "username", "operator"),
+            "protection.operation_denied",
+            exc.account_id or "",
+            {"code": exc.code},
+        )
         db.commit()
-    return JSONResponse(status_code=exc.status_code,content={'detail':exc.detail,'code':exc.code})
+    return JSONResponse(
+        status_code=exc.status_code, content={"detail": exc.detail, "code": exc.code}
+    )
 
 
 @app.exception_handler(IntegrityError)
@@ -277,7 +298,10 @@ def login(
         pass
     if not valid:
         from app.services.protection import incident
-        incident(db,"PANEL_AUTH_FAILURE","MEDIUM",source="panel_auth",occurrence=True)
+
+        incident(
+            db, "PANEL_AUTH_FAILURE", "MEDIUM", source="panel_auth", occurrence=True
+        )
         audit(db, user.username if user else "anonymous", "auth.failed")
         db.commit()
         raise HTTPException(401, "Invalid credentials")
@@ -362,7 +386,27 @@ def accounts(
         stmt = stmt.where(
             SteamAccount.tags.cast(String).contains(json.dumps(tag), autoescape=True)
         )
-    return paginate(db, stmt.order_by(SteamAccount.created_at.desc()), *pg)
+    result = paginate(db, stmt.order_by(SteamAccount.created_at.desc()), *pg)
+    from app.services.account_health import context, health
+    from app.services.compliance import policy
+    from app.models.models import AccountRisk
+
+    ids = [row["id"] for row in result["items"]]
+    accounts_by_id = {
+        a.id: a
+        for a in db.scalars(select(SteamAccount).where(SteamAccount.id.in_(ids)))
+    }
+    risks = {
+        r.account_id: r
+        for r in db.scalars(select(AccountRisk).where(AccountRisk.account_id.in_(ids)))
+    }
+    ctx = context(db)
+    rules = policy(db)
+    for row in result["items"]:
+        row["health"] = health(
+            accounts_by_id[row["id"]], risks.get(row["id"]), rules, ctx
+        )
+    return result
 
 
 @app.post(P + "/accounts", status_code=201)
@@ -523,12 +567,26 @@ def add_group(data: dict, user=Depends(operator), db: DBSession = Depends(get_db
 def nodes(
     pg=Depends(pages), user=Depends(authenticate), db: DBSession = Depends(get_db)
 ):
-    return paginate(
+    result = paginate(
         db,
         select(Node).order_by(Node.created_at.desc()),
         *pg,
         exclude=("credential_hash",),
     )
+    from app.models.models import NodeSafety
+
+    ids = [row["id"] for row in result["items"]]
+    states = {
+        s.node_id: s
+        for s in db.scalars(select(NodeSafety).where(NodeSafety.node_id.in_(ids)))
+    }
+    for row in result["items"]:
+        row["safety"] = (
+            serial(states[row["id"]])
+            if row["id"] in states
+            else {"state": "UNKNOWN", "reasons": []}
+        )
+    return result
 
 
 @app.post(P + "/nodes/enrollment-tokens")
@@ -573,7 +631,14 @@ def enroll(data: Enrollment, request: Request, db: DBSession = Depends(get_db)):
 
 @app.get(P + "/nodes/{id}")
 def node_detail(id: str, user=Depends(authenticate), db: DBSession = Depends(get_db)):
-    return serial(get_or_404(db, Node, id), ("credential_hash",))
+    result = serial(get_or_404(db, Node, id), ("credential_hash",))
+    from app.models.models import NodeSafety
+
+    current = db.get(NodeSafety, id)
+    result["safety"] = (
+        serial(current) if current else {"state": "UNKNOWN", "reasons": []}
+    )
+    return result
 
 
 @app.get(P + "/nodes/{id}/metrics")
@@ -747,6 +812,9 @@ def control_action(
     if action == "pause":
         control.paused = True
     elif action == "resume":
+        from app.services.safety import assert_manager_allowed
+
+        assert_manager_allowed(db)
         control.paused = False
     elif action == "emergency-stop":
         control.paused = True
@@ -762,7 +830,21 @@ def control_action(
         raise HTTPException(404, "Unknown action")
     if action == "emergency-stop":
         from app.services.protection import incident
-        incident(db,"EMERGENCY_STOP","CRITICAL",source="operator:"+user.username)
+
+        event = incident(
+            db, "EMERGENCY_STOP", "CRITICAL", source="operator:" + user.username
+        )
+        from app.services.safety import record_decision
+
+        record_decision(
+            db,
+            "EMERGENCY_STOP",
+            "OPERATOR_REQUEST",
+            event=event,
+            source="operator",
+            actor=user.username,
+            key="emergency:" + utcnow().isoformat(),
+        )
     audit(db, user.username, "control." + action)
     commit(db)
     return serial(control)
@@ -1085,7 +1167,7 @@ def get_settings(user=Depends(authenticate)):
         "node_offline_seconds": settings().node_offline_seconds,
         "retention_days": settings().retention_days,
         "manual_steam_login_required": True,
-        "version": "0.3.0",
+        "version": "0.4.0",
     }
 
 
@@ -1245,15 +1327,24 @@ async def agent_ws(ws: WebSocket):
         node_id = node.id if node else None
     if not node_id:
         from app.services.protection import incident
+
         with SessionLocal() as db:
-            incident(db,"AGENT_AUTH_FAILURE","HIGH",source="agent_auth",occurrence=True);db.commit()
+            incident(
+                db, "AGENT_AUTH_FAILURE", "HIGH", source="agent_auth", occurrence=True
+            )
+            db.commit()
         await ws.close(code=4401)
         return
     await ws.accept()
     with SessionLocal() as db:
-        connected_node=db.get(Node,node_id)
-        connected_node.transport_security="tls_at_listener_or_trusted_proxy" if ws.url.scheme=="wss" else "not_verified_at_listener"
-        connected_node.transport_checked_at=utcnow();db.commit()
+        connected_node = db.get(Node, node_id)
+        connected_node.transport_security = (
+            "tls_at_listener_or_trusted_proxy"
+            if ws.url.scheme == "wss"
+            else "not_verified_at_listener"
+        )
+        connected_node.transport_checked_at = utcnow()
+        db.commit()
     try:
         while True:
             raw = await asyncio.wait_for(ws.receive_text(), timeout=40)
@@ -1273,7 +1364,17 @@ async def agent_ws(ws: WebSocket):
                         data.get("processes", []), list
                     ):
                         raise ValueError("Invalid heartbeat")
-                    metrics = data["metrics"]
+                    from app.services.safety import (
+                        validate_metrics,
+                        ingest_integrity,
+                        ingest_local_safety,
+                    )
+
+                    metrics = validate_metrics(data["metrics"])
+                    if data.get("integrity") is not None:
+                        ingest_integrity(db, node, data["integrity"])
+                    if data.get("safety") is not None:
+                        metrics["local_safety"] = ingest_local_safety(data["safety"])
                     if "hardware" in data:
                         hardware = data["hardware"]
                         if not isinstance(hardware, dict) or not isinstance(
@@ -1302,7 +1403,8 @@ async def agent_ws(ws: WebSocket):
                     if node.status != "online":
                         notify(db, "node_online", f"Node {node.hostname} online")
                     from app.services.protection import resolve_condition
-                    resolve_condition(db,"NODE_OFFLINE",node_id=node.id)
+
+                    resolve_condition(db, "NODE_OFFLINE", node_id=node.id)
                     node.status = "online"
                     node.last_heartbeat = utcnow()
                     node.metrics = {**metrics, "processes": data.get("processes", [])}
@@ -1407,8 +1509,8 @@ def system_status(user=Depends(authenticate)):
     )
     return {
         "mode": "desktop" if desktop else "server",
-        "version": "0.3.0",
-        "backend": {"status": "ready", "version": "0.3.0"},
+        "version": "0.4.0",
+        "backend": {"status": "ready", "version": "0.4.0"},
         "database": {
             "engine": "sqlite" if desktop else "postgresql",
             "status": checks["database"],
@@ -1498,14 +1600,34 @@ if settings().deployment_mode == "desktop":
 
 
 from fastapi.exceptions import RequestValidationError
+
+
 @app.exception_handler(RequestValidationError)
-async def protected_validation_error(request,exc):
-    errors=[{'loc': e['loc'], 'msg':e['msg'], 'type':e['type']} for e in exc.errors()]
-    actor=getattr(getattr(request.state,'user',None),'username',None)
-    if actor and request.method=='POST' and request.url.path in {P+'/jobs',P+'/accounts',P+'/schedules'}:
+async def protected_validation_error(request, exc):
+    errors = [
+        {"loc": e["loc"], "msg": e["msg"], "type": e["type"]} for e in exc.errors()
+    ]
+    actor = getattr(getattr(request.state, "user", None), "username", None)
+    if (
+        actor
+        and request.method == "POST"
+        and request.url.path in {P + "/jobs", P + "/accounts", P + "/schedules"}
+    ):
         from app.services.protection import incident
-        code='INVALID_ACCOUNT_DATA' if request.url.path==P+'/accounts' else 'POLICY_VIOLATION'
+
+        code = (
+            "INVALID_ACCOUNT_DATA"
+            if request.url.path == P + "/accounts"
+            else "POLICY_VIOLATION"
+        )
         with SessionLocal() as db:
-            incident(db,code,'MEDIUM',source='request_validation',evidence={'error_types':list({e['type'] for e in exc.errors()})},occurrence=True)
+            incident(
+                db,
+                code,
+                "MEDIUM",
+                source="request_validation",
+                evidence={"error_types": list({e["type"] for e in exc.errors()})},
+                occurrence=True,
+            )
             db.commit()
-    return JSONResponse(status_code=422,content=jsonable_encoder({'detail':errors}))
+    return JSONResponse(status_code=422, content=jsonable_encoder({"detail": errors}))

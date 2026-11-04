@@ -55,7 +55,7 @@ def copy_sources(destination):
     )
     shutil.copy2(ROOT / "apps/api/alembic.ini", destination / "alembic.ini")
     shutil.copy2(ROOT / "apps/api/desktop_entry.py", destination / "desktop_entry.py")
-    for package in ("agent", "collectors", "process_manager", "security", "transport"):
+    for package in ("agent", "collectors", "process_manager", "security", "transport", "installer"):
         shutil.copytree(
             ROOT / "apps/windows-agent" / package, destination / package, ignore=ignored
         )
@@ -162,6 +162,7 @@ def stage_runtime():
         "Lib/ensurepip",
     ):
         shutil.rmtree(runtime / name, ignore_errors=True)
+    run([sys.executable,ROOT / "scripts/generate-component-manifest.py",runtime])
     return manifest
 
 
@@ -274,7 +275,7 @@ def main():
                     "productName": "CS2 Farm Agent"
                     if product == "agent"
                     else "CS2 Farm Manager",
-                    "version": "0.3.0",
+                    "version": "0.4.0",
                 }
             )
         )

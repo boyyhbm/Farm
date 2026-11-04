@@ -7,6 +7,8 @@ RUN --mount=type=secret,id=proxy_ca \
     if [ -f /run/secrets/proxy_ca ]; then export PIP_CERT=/run/secrets/proxy_ca; fi; \
     pip install --no-cache-dir -r /tmp/requirements.txt
 COPY apps/api /opt/farm
+COPY scripts/generate-component-manifest.py /tmp/generate-component-manifest.py
+RUN python /tmp/generate-component-manifest.py /opt/farm
 RUN useradd --uid 10001 --create-home farm && chown -R farm:farm /opt/farm
 USER farm
 EXPOSE 8000

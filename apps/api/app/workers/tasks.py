@@ -22,12 +22,14 @@ celery_app.conf.update(
     task_routes={
         "farm.inventory_sync": {"queue": "inventory"},
         "farm.protection_check": {"queue": "protection"},
+        "farm.safety_cycle": {"queue": "safety"},
     },
     beat_schedule={
         "dispatch": {"task": "farm.dispatch", "schedule": 5.0},
         "notifications": {"task": "farm.notifications", "schedule": 30.0},
         "inventory-scan": {"task": "farm.inventory_scan", "schedule": 60.0},
         "protection-check": {"task": "farm.protection_check", "schedule": 60.0},
+        "safety-cycle": {"task": "farm.safety_cycle", "schedule": 5.0},
         "retention": {"task": "farm.retention", "schedule": 3600.0},
         "daily-report": {
             "task": "farm.daily_report",
@@ -150,6 +152,10 @@ def retention():
                 RiskIncident.resolved_at < utcnow() - timedelta(days=365),
             )
         )
+        from app.models.models import IntegrityCheck, SafetyDecision, NodeSafety
+        db.execute(delete(SafetyDecision).where(SafetyDecision.created_at < utcnow()-timedelta(days=365)))
+        current_integrity=select(NodeSafety.last_integrity_id).where(NodeSafety.last_integrity_id.is_not(None))
+        db.execute(delete(IntegrityCheck).where(IntegrityCheck.received_at < utcnow()-timedelta(days=365),IntegrityCheck.id.not_in(current_integrity)))
         db.commit()
 
 
@@ -193,3 +199,12 @@ def protection_check(self, account_ids=None):
     if account_ids and result["status"] in {"BUSY", "COOLDOWN", "LEASE_EXPIRED"}:
         raise self.retry(countdown=result.get("retry_after", 60))
     return result
+
+
+@celery_app.task(name="farm.safety_cycle", autoretry_for=(), acks_late=True)
+def safety_cycle():
+    from app.services.safety import cycle
+    with SessionLocal() as db:
+        result=cycle(db)
+        db.commit()
+        return result

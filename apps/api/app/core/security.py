@@ -43,6 +43,8 @@ def bootstrap(db):
         )
     from app.services.compliance import policy
     policy(db)
+    from app.services.safety import get_policy
+    get_policy(db)
     db.commit()
 
 

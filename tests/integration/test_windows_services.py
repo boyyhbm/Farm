@@ -414,6 +414,72 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                     ),
                 )
             print("WINDOWS_CHECK service runtime replacement preserves identities")
+            # Protection Engine 2.0: a real acknowledged, persistent local hold.
+            review = {
+                "confirmed": True,
+                "note": "Explicit installed protection review test",
+            }
+            held_id = node_ids[0]
+            held = client.post(f"/api/v1/protection/nodes/{held_id}/hold", json=review)
+            assert held.status_code == 202, held.text
+            wait_value(
+                lambda: node(held_id),
+                lambda n: n["metrics"].get("local_safety", {}).get("held") is True,
+            )
+            service(names[0], "stop")
+            service(names[0], "start")
+            wait_value(
+                lambda: node(held_id),
+                lambda n: (
+                    n["status"] == "online"
+                    and n["metrics"].get("local_safety", {}).get("held") is True
+                ),
+            )
+            healthy_work = create(duration=1)
+            wait_value(lambda: job(healthy_work), lambda j: j["status"] == "COMPLETED")
+            safe_sessions = client.get("/api/v1/sessions?limit=100").json()["items"]
+            assert (
+                next(s for s in safe_sessions if s["job_id"] == healthy_work)["node_id"]
+                == node_ids[1]
+            )
+            previous_integrity = node(held_id)["safety"]["last_integrity_id"]
+            checked = client.post(
+                f"/api/v1/protection/nodes/{held_id}/integrity-check", json=review
+            )
+            assert checked.status_code == 202, checked.text
+            wait_value(
+                lambda: node(held_id),
+                lambda n: n["safety"]["last_integrity_id"] != previous_integrity,
+            )
+            detail = client.get("/api/v1/protection/nodes/safety?page_size=100").json()[
+                "items"
+            ]
+            report = next(n for n in detail if n["id"] == held_id)["integrity"]
+            assert (
+                report["status"] != "FAILED" and report["report"]["files_checked"] > 0
+            )
+            released = client.post(
+                f"/api/v1/protection/nodes/{held_id}/release", json=review
+            )
+            assert released.status_code == 202, released.text
+            wait_value(
+                lambda: node(held_id),
+                lambda n: (
+                    n["safety"]["state"] in ("READY", "WARNING")
+                    and n["metrics"].get("local_safety", {}).get("held") is False
+                ),
+            )
+            verified_work = create(held_id, 1)
+            wait_value(lambda: job(verified_work), lambda j: j["status"] == "COMPLETED")
+            actions = client.get(
+                f"/api/v1/protection/decisions?node_id={held_id}"
+            ).json()["items"]
+            assert {"QUARANTINE_NODE", "REQUEST_NODE_RELEASE", "RELEASE_NODE"} <= {
+                a["action"] for a in actions
+            }
+            print(
+                "WINDOWS_CHECK protection v2 persistent hold, other-node isolation, real file checks and explicit agent-confirmed release"
+            )
             assert client.get("/api/v1/logs").json()["total"] > 0
     finally:
         import sys

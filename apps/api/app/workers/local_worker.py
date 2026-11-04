@@ -29,6 +29,7 @@ class DesktopWorker:
             (self.control_loop, "desktop-scheduler"),
             (self.inventory_loop, "desktop-inventory"),
             (self.protection_loop, "desktop-protection"),
+            (self.safety_loop, "desktop-safety"),
         ):
             t = threading.Thread(target=target, name=name, daemon=True)
             t.start()
@@ -195,3 +196,15 @@ class DesktopWorker:
                         60 if task["attempts"] < 4 else None,
                     )
             self.stop_event.wait(10)
+
+
+    def safety_loop(self):
+        from app.services.safety import cycle
+        while not self.stop_event.is_set():
+            try:
+                with SessionLocal() as db:
+                    cycle(db)
+                    db.commit()
+            except Exception:
+                log.exception("Independent safety engine cycle failed")
+            self.stop_event.wait(5)

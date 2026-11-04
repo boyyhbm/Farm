@@ -56,6 +56,8 @@ jobs:
           foreach ($Name in $Required) {
             if (!($Smoke.checks | Where-Object { $_.name -eq $Name -and $_.passed })) { throw "Missing successful installed check: $Name" }
           }
+          $Manager = Get-Content artifacts/verification/manager-smoke.json -Raw | ConvertFrom-Json
+          if (!($Manager.checks | Where-Object { $_.name -eq 'packaged_safety_engine_v2_health_and_component_checks' -and $_.passed })) { throw 'Protection Engine 2.0 must be exercised in the actual installed Manager.' }
           [xml]$JUnit = Get-Content artifacts/verification/windows-services.xml -Raw
           $Suite = $JUnit.testsuites.testsuite
           if ([int]$Suite.tests -ne 1 -or [int]$Suite.skipped -ne 0 -or [int]$Suite.failures -ne 0 -or [int]$Suite.errors -ne 0) { throw 'An executed successful SCM integration test is required.' }
@@ -78,7 +80,7 @@ jobs:
           Original native build: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN
 
           Includes exact SHA-256-verified Manager and Agent installers, installed smoke reports and two real LocalSystem agent services on one Windows host.
-          Unsigned Authenticode. Clean Windows 11, physical additional PCs, actual OS reboot, interactive UAC/SmartScreen and a distinct-version schema upgrade remain unverified. See the included acceptance checklist.
+          Unsigned Authenticode. Clean Windows 11, physical additional PCs, actual OS reboot, interactive UAC/SmartScreen and an upgrade from the previous EXE version remain unverified (schema migration is tested). See the included acceptance checklist.
           This draft does not claim a stable production release or bypass SmartScreen.
           "@
           [IO.File]::WriteAllText('artifacts/release-notes.md', $Body, [Text.UTF8Encoding]::new($false))
@@ -87,9 +89,9 @@ jobs:
             $Existing = $Existing | ConvertFrom-Json
             if (!$Existing.isDraft -or $Existing.targetCommitish -ne $Build.head_sha) { throw 'Existing release is not a matching draft.' }
           } else {
-            gh release create $Tag --repo $env:GITHUB_REPOSITORY --draft --target $Build.head_sha --title 'CS2 Farm Manager 0.3.0 — Protection Windows validation' --notes-file artifacts/release-notes.md
+            gh release create $Tag --repo $env:GITHUB_REPOSITORY --draft --target $Build.head_sha --title 'CS2 Farm Manager 0.4.0 — Protection Engine 2.0 Windows validation' --notes-file artifacts/release-notes.md
             if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release. A repository owner may pre-create the matching draft in GitHub Releases.' }
           }
-          gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber artifacts/build/manager/CS2-Farm-Manager-Setup.exe artifacts/build/agent/CS2-Farm-Agent-Setup.exe artifacts/build/build-manifest.json artifacts/verification/installer-smoke.json artifacts/verification/manager-smoke.json artifacts/verification/manager-resume.json artifacts/verification/windows-services.xml artifacts/verification/validation-provenance.json artifacts/verification/windows-installer-signatures.json docs/WINDOWS-LOCAL-CHECKLIST-RU.md docs/PROTECTION-RU.md docs/PROTECTION-VALIDATION-RU.md docs/protection-validation.json artifacts/verification/python-tests.xml artifacts/verification/desktop-unit.log
+          gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber artifacts/build/manager/CS2-Farm-Manager-Setup.exe artifacts/build/agent/CS2-Farm-Agent-Setup.exe artifacts/build/build-manifest.json artifacts/verification/installer-smoke.json artifacts/verification/manager-smoke.json artifacts/verification/manager-resume.json artifacts/verification/windows-services.xml artifacts/verification/validation-provenance.json artifacts/verification/windows-installer-signatures.json docs/WINDOWS-LOCAL-CHECKLIST-RU.md docs/PROTECTION-RU.md docs/FARM-PROTECTION-ENGINE-2-RU.md docs/FARM-PROTECTION-ENGINE-2-VALIDATION-RU.md docs/protection-validation.json artifacts/verification/python-tests.xml artifacts/verification/desktop-unit.log
           if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
           gh release view $Tag --repo $env:GITHUB_REPOSITORY --json url,assets,isDraft

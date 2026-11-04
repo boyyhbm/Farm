@@ -1,7 +1,8 @@
 {
-  "checked_at": "2026-11-04T18:56:56.800Z",
+  "checked_at": "2026-11-04T21:53:40.740Z",
   "sections": 12,
   "protection_manual_hold_history_and_release": true,
+  "protection_v2_health_evidence_policy_and_csv_export": true,
   "system_management_status": true,
   "system_management_diagnostics": true,
   "account_create_edit_delete": true,

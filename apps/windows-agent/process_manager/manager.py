@@ -120,6 +120,8 @@ class ProcessManager:
         return proc.pid
 
     async def stop(self, session_id):
+        if session_id in self.stopping:
+            return
         self.stopping.add(session_id)
         try:
             await self._stop(session_id)

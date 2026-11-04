@@ -27,12 +27,48 @@ module.exports = {
     ] : [])
   ],
   afterPack: async context => {
-    if (agent) return;
     const fs = require('node:fs');
+    const crypto = require('node:crypto');
+    const resources = path.join(context.appOutDir, 'resources');
+    const runtime = path.join(resources, 'runtime/farm-runtime');
+    const manifestFile = path.join(runtime, 'component-integrity.json');
+    function filesUnder(root) {
+      const output = [];
+      for (const item of fs.readdirSync(root, { withFileTypes: true })) {
+        if (item.name === '__pycache__' || item.name === 'component-integrity.json') continue;
+        const file = path.join(root, item.name);
+        if (item.isDirectory()) output.push(...filesUnder(file));
+        else if (item.isFile() && !file.endsWith('.pyc')) output.push(file);
+      }
+      return output;
+    }
+    const hash = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+    const manifest = fs.existsSync(manifestFile) ? JSON.parse(fs.readFileSync(manifestFile, 'utf8')) : {
+      schema: 1, baseline_trust: 'unsigned_local_manifest',
+      files: Object.fromEntries(filesUnder(runtime).map(file => [path.relative(runtime, file).split(path.sep).join('/'), hash(file)]))
+    };
+    if (!agent) {
+      const desktopFiles = [path.join(resources, 'app.asar'), path.join(resources, 'product.json'), path.join(resources, 'node/node.exe'), path.join(resources, 'dashboard/server.js'), ...filesUnder(path.join(resources, 'dashboard/.next/static'))];
+      manifest.desktop_files = Object.fromEntries(desktopFiles.map(file => [path.relative(resources, file).split(path.sep).join('/'), hash(file)]));
+    }
+    fs.writeFileSync(manifestFile, JSON.stringify(manifest));
+    if (agent) return;
     for (const file of ['node_modules/next/package.json', 'node_modules/react/package.json', '.next/BUILD_ID', 'server.js']) {
       const target = path.join(context.appOutDir, 'resources/dashboard', file);
       if (!fs.existsSync(target)) throw new Error(`Incomplete standalone Dashboard payload: ${file}`);
     }
+  },
+  afterSign: async context => {
+    // Refresh hashes after Authenticode changes executable bytes in a signed build.
+    const fs = require('node:fs'); const crypto = require('node:crypto');
+    const resources = path.join(context.appOutDir, 'resources');
+    const runtime = path.join(resources, 'runtime/farm-runtime');
+    const file = path.join(runtime, 'component-integrity.json');
+    const manifest = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const hash = target => crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex');
+    for (const name of Object.keys(manifest.files)) manifest.files[name] = hash(path.join(runtime, name));
+    for (const name of Object.keys(manifest.desktop_files || {})) manifest.desktop_files[name] = hash(path.join(resources, name));
+    fs.writeFileSync(file, JSON.stringify(manifest));
   },
   win: {
     target: [{ target: 'nsis', arch: ['x64'] }],

@@ -78,6 +78,15 @@ def create_job(db, data: JobCreate, key, actor):
     assert_operation(
         db, data, db.get(SteamAccount, data.account_id) if data.account_id else None
     )
+    from app.services.safety import assert_node_allowed, assert_manager_allowed
+
+    assert_manager_allowed(db)
+    target_node = data.node_id or (
+        db.get(SteamAccount, data.account_id).assigned_node_id
+        if data.account_id
+        else None
+    )
+    assert_node_allowed(db, target_node, data.kind)
     job = Job(
         **data.model_dump(exclude={"payload", "scheduled_at"}),
         payload=data.payload.model_dump(),
@@ -95,12 +104,51 @@ def stop_session(db, session, actor="scheduler"):
         return
     if session.status != "STOPPING":
         transition(session, "STOPPING")
-    existing = db.scalar(
-        select(Command).where(
-            Command.session_id == session.id, Command.operation == "stop"
+    previous = list(
+        db.scalars(
+            select(Command)
+            .where(Command.session_id == session.id, Command.operation == "stop")
+            .order_by(Command.created_at)
         )
     )
+    existing = next(
+        (c for c in previous if c.ack_status is None and aware(c.deadline) > utcnow()),
+        None,
+    )
+    automatic = actor in ("scheduler", "safety-engine", "protection")
+    if not existing and automatic and len(previous) >= 3:
+        from app.models.models import NodeSafety
+        from app.services.protection import incident
+
+        safety = db.get(NodeSafety, session.node_id)
+        if safety is None:
+            safety = NodeSafety(node_id=session.node_id)
+            db.add(safety)
+            db.flush()
+        safety.state = "REVIEW_REQUIRED"
+        safety.reasons = sorted(set(safety.reasons or []) | {"STOP_RETRY_EXHAUSTED"})
+        safety.triggered_at = utcnow()
+        incident(
+            db,
+            "STOP_RETRY_EXHAUSTED",
+            "CRITICAL",
+            node_id=session.node_id,
+            job_id=session.job_id,
+            source="managed_stop",
+            evidence={
+                "attempts": len(previous),
+                "remedy": "Inspect the agent and managed processes. Use an explicit stop or graphical service restart; no automatic reservation release.",
+            },
+        )
+        return
     if not existing:
+        for expired in previous:
+            if expired.ack_status is None:
+                expired.ack_status = "FAILED"
+                expired.ack = {
+                    "status": "FAILED",
+                    "error": "Stop command expired; awaiting fresh reconciliation",
+                }
         db.add(
             Command(
                 node_id=session.node_id,
@@ -138,6 +186,9 @@ def retry_job(db, job, actor):
         JobCreate(kind=job.kind, account_id=job.account_id, node_id=job.node_id),
         db.get(SteamAccount, job.account_id) if job.account_id else None,
     )
+    from app.services.safety import assert_node_allowed
+
+    assert_node_allowed(db, job.node_id, job.kind)
     job.status = "QUEUED"
     job.attempts = 0
     job.scheduled_at = utcnow()
@@ -220,6 +271,15 @@ def acknowledge(db, node, data):
             source="agent_process",
             evidence={"error": safe_message(data.get("error", "Process failed"))},
         )
+    if command.operation in (
+        "integrity_check",
+        "game_baseline_capture",
+        "safety_release",
+        "repair_acknowledge",
+    ):
+        from app.services.safety import handle_control_ack
+
+        handle_control_ack(db, node, command, data)
     if session:
         if session.status in TERMINAL:
             return
@@ -241,7 +301,9 @@ def acknowledge(db, node, data):
                 db,
                 session,
                 "TIMED_OUT" if timed_out else status,
-                safe_message(str(data.get("error")))[:4000] if data.get("error") else None,
+                safe_message(str(data.get("error")))[:4000]
+                if data.get("error")
+                else None,
                 data.get("exit_code"),
             )
             # A terminal result also resolves any pending start/stop commands for this session.
@@ -278,6 +340,10 @@ def tick(db):
     from app.services.protection import enforce
 
     enforce(db)
+    from app.services.compliance import ProtectionDenied
+    from app.services.safety import cycle
+
+    cycle(db)
     control = db.get(Control, 1)
     if not control:
         return
@@ -388,6 +454,16 @@ def tick(db):
         if control.policy != "fifo"
         else (Job.created_at,)
     )
+    from app.models.models import NodeSafety
+
+    held_nodes = set(
+        db.scalars(
+            select(NodeSafety.node_id).where(
+                NodeSafety.state.in_(("REVIEW_REQUIRED", "RELEASING"))
+            )
+        )
+    )
+    nodes = [n for n in nodes if n.id not in held_nodes]
     risk_by_account = {r.account_id: r for r in db.scalars(select(AccountRisk))}
     rules = policy(db)
     jobs = list(
@@ -408,10 +484,19 @@ def tick(db):
             job.error = "Account archived"
             continue
         assigned = job.node_id or (account.assigned_node_id if account else None)
+        from app.services.safety import assert_node_allowed
+
+        eligible = []
+        for candidate in nodes:
+            try:
+                assert_node_allowed(db, candidate.id, job.kind)
+                eligible.append(candidate)
+            except ProtectionDenied:
+                pass
         node = next(
             (
                 n
-                for n in nodes
+                for n in eligible
                 if n.id not in busy
                 and (not assigned or n.id == assigned)
                 and not decision(

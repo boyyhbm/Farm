@@ -75,6 +75,12 @@ services:
     depends_on:
       api:
         condition: service_healthy
+  safety:
+    <<: *api
+    command: ["celery", "-A", "app.workers.tasks:celery_app", "worker", "--loglevel=INFO", "--queues=safety", "--concurrency=1", "--hostname=safety@%h"]
+    depends_on:
+      api:
+        condition: service_healthy
   scheduler:
     <<: *api
     command: ["celery", "-A", "app.workers.tasks:celery_app", "beat", "--loglevel=INFO", "--schedule=/tmp/celerybeat-schedule"]

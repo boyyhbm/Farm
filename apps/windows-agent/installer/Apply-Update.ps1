@@ -22,7 +22,9 @@ try {
     Stop-Service CS2FarmAgent -ErrorAction SilentlyContinue
     Remove-Item $Current -Recurse -Force -ErrorAction SilentlyContinue
     if (Test-Path $Previous) { Move-Item $Previous $Current }
+    @{code="AGENT_UPDATE_FAILED"; checked_at=[DateTime]::UtcNow.ToString("o"); phase="activation_rolled_back"} | ConvertTo-Json | Set-Content "$DataDir\update-failure.json" -Encoding utf8
     Start-Service CS2FarmAgent
     throw
 }
+Remove-Item "$DataDir\update-failure.json" -ErrorAction SilentlyContinue
 Write-Output 'Signed release activated; previous version retained for rollback.'

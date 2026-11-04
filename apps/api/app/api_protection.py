@@ -189,10 +189,12 @@ def overview(user=Depends(authenticate), db=Depends(get_db)):
         ],
         "provider": {
             "configured": bool(service.api_key()),
-            "status": rules.provider_status,
+            "status": "CONFIGURATION_ERROR"
+            if service.key_error()
+            else rules.provider_status,
             "checked_at": rules.provider_checked_at,
             "retry_at": rules.provider_retry_at,
-            "error": rules.provider_error,
+            "error": service.key_error() or rules.provider_error,
             "source": service.SOURCE,
         },
         "policy": serial(rules),

@@ -306,6 +306,13 @@ async function smokeTest() {
     const protectionWindow = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
     await protectionWindow.loadURL(ORIGIN + '/protection'); protectionWindow.destroy();
     check('packaged_protection_api_and_page');
+    const engineResponse = await fetch(`${ORIGIN}/api/v1/protection/safety/status`, { headers: { Cookie: cookie } });
+    if (!engineResponse.ok) throw new Error(`Safety engine HTTP ${engineResponse.status}`);
+    const engine = await engineResponse.json();
+    if (engine.version !== '2.0' || !engine.manager_integrity || engine.manager_integrity.status === 'FAILED' || engine.manager_integrity.report.files_checked < 1) throw new Error('Packaged safety engine or actual Manager component checks failed');
+    const health = await fetch(`${ORIGIN}/api/v1/protection/health/accounts`, { headers: { Cookie: cookie } });
+    if (!health.ok || !(await health.json()).items.some(value => value.id === account.id && value.health?.source === 'protection_engine_v2_derived')) throw new Error('Account Health API missing');
+    check('packaged_safety_engine_v2_health_and_component_checks');
     const diagnostic = await diagnose(supervisor, { mode: 'server' }, app.getVersion());
     if (!diagnostic.passed) throw new Error('Packaged GUI diagnosis failed: ' + JSON.stringify(diagnostic.checks));
     check('graphical_self_diagnostics_all_automatic_checks');

@@ -55,6 +55,7 @@ import { api, ApiError, setCsrf, download, allPages } from "@/services/api";
 import { useUI } from "@/lib/store";
 import { money, date } from "@/lib/utils";
 import type { User, Page, Row, Field, Section } from "@/types";
+import { HealthBadge } from "@/components/health-badge";
 import Protection, { ProtectionSummary } from "@/components/protection";
 const menu = [
   { id: "dashboard", icon: LayoutDashboard, en: "Overview", ru: "Обзор" },
@@ -1494,6 +1495,7 @@ export default function FarmDashboard({ initialSection }: { initialSection?: Sec
                       </div>
                     ),
                   },
+                  {key:"health",label:t("ЗДОРОВЬЕ","HEALTH"),render:r=><HealthBadge value={(r.health as Row|undefined)?.status}/>},
                   {
                     key: "prime_status",
                     label: "PRIME",
@@ -1678,6 +1680,7 @@ export default function FarmDashboard({ initialSection }: { initialSection?: Sec
                       return `${m.cpu_percent ?? "—"}% / ${m.ram_percent ?? "—"}%`;
                     },
                   },
+                  {key:"safety",label:t("ЗАЩИТА","SAFETY"),render:r=><HealthBadge value={(r.safety as Row|undefined)?.state}/>},
                   { key: "agent_version", label: "AGENT" },
                   {
                     key: "last_heartbeat",

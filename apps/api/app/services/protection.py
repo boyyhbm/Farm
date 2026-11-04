@@ -154,13 +154,29 @@ def get_risk(db, id):
     return risk
 
 
+_credential_error = None
+
+
+def key_error():
+    return _credential_error
+
+
 def api_key():
+    global _credential_error
+    _credential_error = None
     if settings().deployment_mode == "desktop":
         file = Path(settings().desktop_data_dir) / "protection-secrets.dat"
         if file.exists():
             from security.credentials import read_credentials
 
-            return read_credentials(file).get("steam_api_key", "")
+            try:
+                value = read_credentials(file).get("steam_api_key", "")
+                if not isinstance(value, str):
+                    raise TypeError("Invalid protected credential format")
+                return value
+            except Exception:  # noqa: BLE001 - DPAPI raises native errors; never expose encrypted bytes or disable safety logging
+                _credential_error = "Protected Steam API credentials cannot be read. Re-enter the key using Protection; other Windows identities cannot decrypt this DPAPI store."
+                return ""
     return settings().steam_api_key.get_secret_value()
 
 
@@ -246,9 +262,23 @@ def _check_accounts(db, ids=None, *, transport=None):
     if not accounts:
         return {"status": "idle", "checked": 0}
     key = api_key()
-    if not key and ids is None:
-        rules.provider_status = "NOT_CONFIGURED"
-        return {"status": "NOT_CONFIGURED", "checked": 0}
+    if not key and (ids is None or key_error()):
+        rules.provider_status = (
+            "CONFIGURATION_ERROR" if key_error() else "NOT_CONFIGURED"
+        )
+        rules.provider_error = key_error()
+        if key_error():
+            incident(
+                db,
+                "STEAM_API_CONFIGURATION_ERROR",
+                "HIGH",
+                source="protected_credential_store",
+                evidence={
+                    "code": "DPAPI_STORE_UNREADABLE",
+                    "remedy": "Re-enter the API key using the graphical Protection settings",
+                },
+            )
+        return {"status": rules.provider_status, "checked": 0}
     # Shared atomic request slot across replicas and inventory workers.
     try:
         _rate_limit("protection", 2)
@@ -403,7 +433,7 @@ def enforce(db):
         if reason:
             cancel_job(db, job, "protection")
             job.error = "Protection: " + reason
-            incident(
+            event = incident(
                 db,
                 reason,
                 "CRITICAL" if reason == "CONFIRMED_RESTRICTION" else "HIGH",
@@ -412,6 +442,18 @@ def enforce(db):
                 job_id=job.id,
                 source="compliance",
                 evidence={"operation": job.kind},
+            )
+            from app.services.safety import record_decision
+
+            record_decision(
+                db,
+                "STOP_AFFECTED_JOB",
+                reason,
+                account_id=job.account_id,
+                node_id=session.node_id if session else job.node_id,
+                job_id=job.id,
+                event=event,
+                source="compliance",
             )
             audit(
                 db, "protection", "protection.job_stopped", job.id, {"reason": reason}

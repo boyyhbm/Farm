@@ -108,7 +108,7 @@ def initialize(directory, origin, payload):
         "status": "configured",
         "database": "sqlite",
         "queue": "sqlite",
-        "version": "0.3.0",
+        "version": "0.4.0",
     }
 
 
@@ -141,7 +141,7 @@ def backup(directory, output):
                 json.dumps(
                     {
                         "format": 1,
-                        "version": "0.3.0",
+                        "version": "0.4.0",
                         "kind": "database-only",
                         "includes_credentials": False,
                     }

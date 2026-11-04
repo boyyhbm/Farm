@@ -6,6 +6,8 @@ import { api } from "@/services/api";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table";
 import { ActionDialog, type FormSpec } from "@/components/action-dialog";
+import dynamic from "next/dynamic";
+const SafetyEngine = dynamic(() => import("@/components/safety-engine"));
 import { date } from "@/lib/utils";
 import type { Row, Page, Field } from "@/types";
 
@@ -243,6 +245,7 @@ export default function Protection({
           {notice}
         </div>
       )}
+      <SafetyEngine ru={ru} role={role} />
       <div className="protection-grid">
         {[
           [
