@@ -11,7 +11,7 @@ async function serviceStatus(supervisor) {
 }
 async function serviceAdmin(supervisor, action, payload = {}) {
   if (process.platform !== 'win32') throw new Error('Фоновая служба доступна только на Windows.');
-  if (!['install', 'start', 'stop', 'remove', 'applications', 'applications-info'].includes(action)) throw new Error('Unknown service action');
+  if (!['install', 'start', 'stop', 'remove', 'applications', 'applications-info', 'refresh', 'reset'].includes(action)) throw new Error('Unknown service action');
   const request = path.join(supervisor.paths.dataDir, '.service-' + crypto.randomUUID() + '.json');
   const result = request + '.result';
   fs.writeFileSync(request, JSON.stringify({ action, payload }), { flag: 'wx', mode: 0o600 });

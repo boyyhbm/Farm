@@ -46,3 +46,39 @@ def test_service_setup_rejects_remote_commands_before_touching_scm(
 def test_non_windows_cannot_report_a_working_windows_service():
     with pytest.raises(RuntimeError, match="only on Windows"):
         bridge.status()
+
+
+def test_protected_runtime_refresh_rolls_back_and_preserves_credentials(
+    tmp_path, monkeypatch
+):
+    source = tmp_path / "source"
+    source.mkdir()
+    (source / "desktop_entry.py").write_text("new-version")
+    target = tmp_path / "protected" / "runtime"
+    target.mkdir(parents=True)
+    (target / "desktop_entry.py").write_text("old-version")
+    data = tmp_path / "data"
+    data.mkdir()
+    (data / "credentials.dat").write_bytes(b"unchanged-dpapi")
+    monkeypatch.setattr(bridge, "_windows", lambda **kw: None)
+    monkeypatch.setattr(bridge, "_protect", lambda *args, **kw: None)
+    monkeypatch.setattr(bridge, "paths", lambda name: (target, data))
+    monkeypatch.setattr(
+        bridge, "status", lambda name: {"installed": True, "status": "running"}
+    )
+    starts = []
+
+    def control(action, name):
+        if action == "start":
+            starts.append(action)
+            if len(starts) == 1:
+                raise RuntimeError("New runtime failed startup")
+
+    monkeypatch.setattr(bridge, "control", control)
+    with pytest.raises(RuntimeError, match="startup"):
+        bridge.refresh(source)
+    assert len(starts) == 2
+    assert (target / "desktop_entry.py").read_text() == "old-version"
+    assert (data / "credentials.dat").read_bytes() == b"unchanged-dpapi"
+    assert not target.with_name("runtime.new").exists()
+    assert not target.with_name("runtime.previous").exists()

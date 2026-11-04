@@ -645,6 +645,15 @@ def main():
                 result = service_bridge.install(
                     request.get("payload", {}), base, args.service_name
                 )
+            elif action == "refresh":
+                base = (
+                    Path(sys.executable).parent
+                    if getattr(sys, "frozen", False)
+                    else ROOT
+                )
+                result = service_bridge.refresh(base, args.service_name)
+            elif action == "reset":
+                result = service_bridge.reset(args.service_name)
             elif action == "applications-info":
                 from agent.desktop import get_applications
 

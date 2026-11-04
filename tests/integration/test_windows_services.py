@@ -321,6 +321,17 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 )
             final_job = create(duration=1)
             wait_value(lambda: job(final_job), lambda j: j["status"] == "COMPLETED")
+            # Real protected runtime replacement retains both SYSTEM identities.
+            for name, node_id in zip(names, node_ids, strict=True):
+                before_heartbeat = node(node_id)["last_heartbeat"]
+                updated = service(name, "refresh")
+                assert updated["status"] == "running" and updated["automatic_start"]
+                wait_value(
+                    lambda node_id=node_id: node(node_id),
+                    lambda n, before=before_heartbeat: (
+                        n["status"] == "online" and n["last_heartbeat"] != before
+                    ),
+                )
             assert client.get("/api/v1/logs").json()["total"] > 0
     finally:
         for name in reversed(installed):

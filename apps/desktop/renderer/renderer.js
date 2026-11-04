@@ -171,3 +171,6 @@ $('export-diagnostics').addEventListener('click', () => action('export-diagnosti
 
 $('service-refresh').addEventListener('click', () => action('service-status').then(renderStatus).catch(() => {}));
 for (const operation of ['start', 'stop', 'remove']) $('service-' + operation).addEventListener('click', () => action('service-control', { action: operation }).then(value => { if (!value.cancelled) renderStatus(value); }).catch(() => {}));
+
+$('service-refresh-runtime').addEventListener('click', () => action('service-control', { action: 'refresh' }).then(value => { if (!value.cancelled) renderStatus(value); }).catch(() => {}));
+$('service-reset').addEventListener('click', () => action('service-control', { action: 'reset' }).catch(() => {}));

@@ -162,8 +162,16 @@ def control(action, name="CS2FarmAgent"):
             _wait(service, win32service.SERVICE_RUNNING)
         else:
             if state != win32service.SERVICE_STOPPED:
+                pid = win32service.QueryServiceStatusEx(service).get("ProcessId", 0)
                 win32service.ControlService(service, win32service.SERVICE_CONTROL_STOP)
                 _wait(service, win32service.SERVICE_STOPPED)
+                if pid:
+                    import psutil
+
+                    try:
+                        psutil.Process(pid).wait(timeout=15)
+                    except psutil.NoSuchProcess:
+                        pass
             if action == "remove":
                 win32service.DeleteService(service)
     finally:
@@ -389,3 +397,55 @@ def applications(payload, name="CS2FarmAgent"):
     finally:
         if running:
             control("start", name)
+
+
+def refresh(source_root, name="CS2FarmAgent"):
+    """Replace only the protected runtime, preserving SYSTEM identity and journal."""
+    _windows(admin=True)
+    _name(name)
+    if not status(name)["installed"]:
+        raise ValueError("Install the service first")
+    source = Path(source_root).resolve()
+    _reject_reparse(source)
+    target, _ = paths(name)
+    _reject_reparse(target.parent)
+    staged = target.with_name("runtime.new")
+    previous = target.with_name("runtime.previous")
+    if staged.exists() or previous.exists():
+        raise ValueError(
+            "Previous runtime replacement needs recovery; existing service was preserved"
+        )
+    running = status(name)["status"] == "running"
+    try:
+        shutil.copytree(source, staged)
+        _protect(staged, readable=True)
+        control("stop", name)
+        target.rename(previous)
+        staged.rename(target)
+        if running:
+            control("start", name)
+    except Exception:  # Restore the old executable before propagating any failure
+        if previous.exists():
+            control("stop", name)
+            if target.exists():
+                shutil.rmtree(target)
+            previous.rename(target)
+            if running:
+                control("start", name)
+        raise
+    finally:
+        if staged.exists():
+            shutil.rmtree(staged)
+    shutil.rmtree(previous)
+    return status(name)
+
+
+def reset(name="CS2FarmAgent"):
+    """Explicit GUI-confirmed disconnection. Always stop managed processes first."""
+    _windows(admin=True)
+    result = control("remove", name)
+    _, data = paths(name)
+    if data.exists():
+        _reject_reparse(data)
+        shutil.rmtree(data)
+    return result

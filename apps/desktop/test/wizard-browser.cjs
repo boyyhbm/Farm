@@ -17,6 +17,7 @@ const { chromium } = require('../../dashboard/node_modules/@playwright/test');
     const status = { configured: false, config: null, services: {}, logs: [], product: { name: 'CS2 Farm Manager', version: '0.2.0', defaultMode: 'server' }, system: { ok: true, message: 'Explicit test adapter: components available', platform: 'linux', release: 'test', arch: 'x64', memoryBytes: 8 * 1024 ** 3, diskFreeBytes: 5 * 1024 ** 3 } };
     window.farmSetup = { onStatus: () => () => {}, onEnrollment: () => () => {}, invoke: async (action, payload) => {
       window.__calls.push({ action, ...(action === 'configure' ? { mode: payload.mode, username: payload.username, passwordWasProvided: payload.password.length >= 14 } : {}) });
+      if (action === 'diagnose') return { ...status, configured: true, config: { mode: 'server' }, diagnostics: { passed: false, checks: [{ id: 'backend', title: 'Backend API', status: 'failed', code: 'REFUSED', detail: '<img src=x onerror=alert(1)> ECONNREFUSED', remedy: 'Проверьте Backend на главном ПК.' }] } };
       if (action === 'configure') return { ...status, configured: true, config: { mode: 'server', autoStart: true, closeToTray: true }, services: { backend: { status: 'up' }, database: { status: 'up' }, queue: { status: 'up' }, dashboard: { status: 'up' } } };
       return status;
     } };
@@ -30,12 +31,16 @@ const { chromium } = require('../../dashboard/node_modules/@playwright/test');
     if (await page.locator('#password').inputValue()) throw new Error('Password retained after successful IPC setup');
     await page.locator('#next').click(); await page.locator('[data-step="6"]').waitFor({ state: 'visible' }); await page.locator('#next').click();
     await page.locator('#management').waitFor({ state: 'visible' });
+    await page.locator('#diagnose').click();
+    await page.locator('#diagnostic-results').getByText('Что делать: Проверьте Backend на главном ПК.', { exact: true }).waitFor();
+    if (await page.locator('#diagnostic-results img').count()) throw new Error('Diagnostic error was interpreted as HTML');
+    if (!(await page.locator('#notice').innerText()).includes('Обнаружены проблемы')) throw new Error('Failed diagnostic rendered as success');
     const calls = await page.evaluate(() => window.__calls);
     if (!calls.some(value => value.action === 'configure' && value.passwordWasProvided) || !calls.some(value => value.action === 'open-dashboard')) throw new Error('Wizard did not invoke setup/open-dashboard');
     if (errors.length) throw new Error(errors.join('; '));
     const directory = path.join(__dirname, 'results'); fs.mkdirSync(directory, { recursive: true });
     await page.screenshot({ path: path.join(directory, 'system-management.png'), fullPage: true });
-    fs.writeFileSync(path.join(directory, 'wizard-browser.json'), JSON.stringify({ checkedAt: new Date().toISOString(), scope: 'Chromium local HTML with explicitly mocked IPC; not Electron or Windows installation', six_step_flow: true, password_cleared_after_setup: true, pageErrors: errors, passed: true }, null, 2));
+    fs.writeFileSync(path.join(directory, 'wizard-browser.json'), JSON.stringify({ checkedAt: new Date().toISOString(), scope: 'Chromium local HTML with explicitly mocked IPC; not Electron or Windows installation', six_step_flow: true, password_cleared_after_setup: true, diagnosis_failure_remedy_visible: true, diagnostic_text_is_not_html: true, pageErrors: errors, passed: true }, null, 2));
     console.log('PASS six-step wizard HTML, IPC invocation, password cleanup, System Management rendering (mock IPC only)');
   } finally { await browser.close(); await new Promise(resolve => server.close(resolve)); }
 })().catch(error => { console.error(error.message); process.exitCode = 1; });
