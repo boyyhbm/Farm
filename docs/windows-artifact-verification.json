@@ -1,11 +1,11 @@
 {
-  "checked_at": "2026-11-04T19:15:50.455333+00:00",
+  "checked_at": "2026-11-04T23:51:41.768582+00:00",
   "scope": "PE structure, complete NSIS container CRC and checksum; no Windows installation or launch executed",
   "artifacts": [
     {
       "filename": "CS2-Farm-Manager-Setup.exe",
-      "size_bytes": 447856754,
-      "sha256": "ed72de71fe86b59b42f25041f11f0f50ef1ceb7401a96ca7bb77d0c8989c1033",
+      "size_bytes": 448426990,
+      "sha256": "b5bdb9a9a606995b75f167e2ac31b0cb6e170aa1575fa121f4794bb8fe624442",
       "pe_machine": "0x14c",
       "nsis_container": true,
       "crc32_valid": true,
@@ -15,8 +15,8 @@
     },
     {
       "filename": "CS2-Farm-Agent-Setup.exe",
-      "size_bytes": 204238876,
-      "sha256": "05595fbec4cacb21ece7fb47171f3e5be919de68227f8d709748a03aa17e281f",
+      "size_bytes": 204514312,
+      "sha256": "412e3082e4006be2b14d42d2665cb5339b9305999b693134b75e15891bb784c5",
       "pe_machine": "0x14c",
       "nsis_container": true,
       "crc32_valid": true,

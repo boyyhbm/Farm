@@ -1,18 +1,19 @@
 {
-  "checked_at": "2026-11-04",
-  "version": "0.3.0",
-  "source_commit": "d71402bd34569fe4dd2e5b1db44c1cfba58baa1e",
+  "checked_at": "2026-11-04T23:51:41.768582+00:00",
+  "version": "0.4.0",
+  "engine_version": "2.0",
+  "source_commit": "8063127f52af7c9a76851646a984cabfbb305d53",
   "windows_ci": {
-    "run_id": 41892308025,
-    "url": "https://github.com/boyyhbm/Farm/actions/runs/41892308025",
+    "run_id": 41934955027,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41934955027",
     "status": "completed",
     "conclusion": "success",
     "os": "Windows Server 2022 x64",
     "source_overlay": false,
     "python": {
-      "passed": 93,
+      "passed": 124,
       "skipped": 1,
-      "duration_seconds": 52.456,
+      "duration_seconds": 71.226,
       "skip_reason": "non-Windows platform rejection contract"
     },
     "desktop_node": {
@@ -24,18 +25,22 @@
       "failed": 0
     },
     "manager_checks": {
-      "passed": 8,
+      "passed": 9,
       "failed": 0,
-      "protection_api_and_page": true
+      "packaged_engine_v2_and_integrity": true
     },
     "two_scm_agents": {
       "scenarios_passed": 1,
       "skipped": 0,
-      "duration_seconds": 184.452,
+      "duration_seconds": 236.952,
       "physical_hosts": 1,
       "service_instances": 2,
       "tls_and_telemetry": true,
-      "parallel_tasks_stop_rotation_offline_unknown_recovery": true
+      "parallel_tasks_stop_rotation_offline_unknown_recovery": true,
+      "local_hold_persists_after_service_restart": true,
+      "unaffected_node_continues_test_work": true,
+      "agent_integrity_report_observed": true,
+      "reviewed_release_with_real_ack": true
     }
   },
   "local_inspection": {
@@ -47,8 +52,8 @@
   "artifacts": [
     {
       "filename": "CS2-Farm-Manager-Setup.exe",
-      "size_bytes": 447856754,
-      "sha256": "ed72de71fe86b59b42f25041f11f0f50ef1ceb7401a96ca7bb77d0c8989c1033",
+      "size_bytes": 448426990,
+      "sha256": "b5bdb9a9a606995b75f167e2ac31b0cb6e170aa1575fa121f4794bb8fe624442",
       "pe_machine": "0x14c",
       "nsis_container": true,
       "crc32_valid": true,
@@ -58,8 +63,8 @@
     },
     {
       "filename": "CS2-Farm-Agent-Setup.exe",
-      "size_bytes": 204238876,
-      "sha256": "05595fbec4cacb21ece7fb47171f3e5be919de68227f8d709748a03aa17e281f",
+      "size_bytes": 204514312,
+      "sha256": "412e3082e4006be2b14d42d2665cb5339b9305999b693134b75e15891bb784c5",
       "pe_machine": "0x14c",
       "nsis_container": true,
       "crc32_valid": true,
@@ -80,15 +85,26 @@
   },
   "release": {
     "draft": true,
-    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-225b7c9a14d04c106e54",
-    "export_workflow": "https://github.com/boyyhbm/Farm/actions/runs/41894710135"
+    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-41d496b9251844b0edb1",
+    "export_workflow": "https://github.com/boyyhbm/Farm/actions/runs/41936809533"
+  },
+  "artifact_provenance": {
+    "artifact_id": 13374681264,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41934955027/artifacts/13374681264",
+    "archive_sha256": "efe50748e3efbe5b037598d5c050377659d5d827c60de3519a4639fd33ffadd5",
+    "native_exe_hashes": "build-manifest.json; export workflow verifies each EXE before release upload",
+    "signed": false,
+    "verification_artifact_id": 13374960749,
+    "verification_archive_sha256": "2a454bd0588bb6e0cb8d42d1eb9ee6209dccc767eccac55cd6a43d94c0cb182b"
   },
   "unverified": [
-    "Clean Windows 11/10 installation and interactive UAC/SmartScreen",
-    "Actual OS reboot",
-    "Two physical additional Windows PCs",
-    "Upgrade from an earlier EXE version (schema upgrade and same-version reinstall checked separately)",
-    "Live Steam GetPlayerBans with an administrator API key",
-    "Telegram delivery to an administrator chat"
+    "Clean Windows 10/11 without preinstalled developer runtimes",
+    "Actual OS reboot and interactive UAC/SmartScreen",
+    "Two physical additional PCs",
+    "Upgrade from the previously released EXE version; old-schema migration and same-version reinstall are tested separately",
+    "Live Steam GetPlayerBans with a real administrator key",
+    "Real Telegram delivery",
+    "Physical CPU/GPU thermal faults; injected faults are covered by tests",
+    "Signed publisher build and authenticated game-wide baseline"
   ]
 }

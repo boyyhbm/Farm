@@ -113,5 +113,36 @@
     "signed": false,
     "verification_artifact_id": 13374960749,
     "verification_archive_sha256": "2a454bd0588bb6e0cb8d42d1eb9ee6209dccc767eccac55cd6a43d94c0cb182b"
+  },
+  "artifacts": {
+    "CS2-Farm-Agent-Setup.exe": {
+      "size_bytes": 204514312,
+      "sha256": "412e3082e4006be2b14d42d2665cb5339b9305999b693134b75e15891bb784c5"
+    },
+    "CS2-Farm-Manager-Setup.exe": {
+      "size_bytes": 448426990,
+      "sha256": "b5bdb9a9a606995b75f167e2ac31b0cb6e170aa1575fa121f4794bb8fe624442"
+    }
+  },
+  "release": {
+    "draft": true,
+    "url": "https://github.com/boyyhbm/Farm/releases/tag/untagged-41d496b9251844b0edb1",
+    "export_workflow": "https://github.com/boyyhbm/Farm/actions/runs/41936809533"
+  },
+  "local_installer_verification": {
+    "downloaded_exact_native_bytes": true,
+    "sha256_matches_native_manifest": true,
+    "nsis_crc_and_pe_valid": true,
+    "windows_executed_here": false
+  },
+  "native_signatures": {
+    "CS2-Farm-Manager-Setup.exe": {
+      "status": "NotSigned",
+      "signer": null
+    },
+    "CS2-Farm-Agent-Setup.exe": {
+      "status": "NotSigned",
+      "signer": null
+    }
   }
 }

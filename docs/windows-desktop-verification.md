@@ -1,6 +1,6 @@
 # Реальная Windows-валидация CS2 Farm Manager
 
-**Текущая поставка 0.3.0 с Protection:** [новый отчёт и Windows CI 41892308025](PROTECTION-VALIDATION-RU.md). Ниже сохранён отчёт предыдущей версии 0.2.0; его EXE и хеши относятся к предыдущей сборке.
+**Текущая поставка 0.4.0 с Protection Engine 2.0:** [новый отчёт и Windows CI 41934955027](FARM-PROTECTION-ENGINE-2-VALIDATION-RU.md). Отчёт [Protection 0.3.0](PROTECTION-VALIDATION-RU.md) сохранён отдельно. Ниже — исторический отчёт 0.2.0; его EXE и хеши относятся к той сборке.
 
 Дата: 2026-11-04. **Полный native Windows CI прошёл успешно.**
 
