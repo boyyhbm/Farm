@@ -1,0 +1,94 @@
+{
+  "source_commit": "d71402bd34569fe4dd2e5b1db44c1cfba58baa1e",
+  "version": "0.3.0",
+  "checked_at": "2026-11-04",
+  "local": {
+    "python_full_suite": {
+      "passed": 105,
+      "skipped": 1,
+      "duration_seconds": 42.29,
+      "skip_reason": "Windows SCM integration requires Windows"
+    },
+    "protection_logic": {
+      "passed": 18,
+      "duration_seconds": 2.04,
+      "steam_adapter": "explicit httpx.MockTransport in tests only"
+    },
+    "desktop_node": {
+      "passed": 13,
+      "failed": 0
+    },
+    "dashboard_production_build": "passed",
+    "typescript": "passed",
+    "browser": {
+      "checked_at": "2026-11-04T18:56:56.800Z",
+      "sections": 12,
+      "protection_manual_hold_history_and_release": true,
+      "system_management_status": true,
+      "system_management_diagnostics": true,
+      "account_create_edit_delete": true,
+      "mobile_navigation": true,
+      "pageErrors": [],
+      "apiFailures": []
+    },
+    "postgresql_migration": {
+      "postgresql_upgrade_0002_to_0003": true,
+      "existing_account_preserved": true,
+      "downgrade_and_reupgrade": true,
+      "partial_unique_index_created": true
+    },
+    "sqlite_migration_0002_to_0003": "passed; existing account and administrator hash preserved"
+  },
+  "windows_ci": {
+    "run_id": 41892308025,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41892308025",
+    "status": "completed",
+    "conclusion": "success",
+    "os": "Windows Server 2022 x64",
+    "source_overlay": false,
+    "python": {
+      "passed": 93,
+      "skipped": 1,
+      "duration_seconds": 52.456,
+      "skip_reason": "non-Windows platform rejection contract"
+    },
+    "desktop_node": {
+      "passed": 13,
+      "failed": 0
+    },
+    "installer_checks": {
+      "passed": 22,
+      "failed": 0
+    },
+    "manager_checks": {
+      "passed": 8,
+      "failed": 0,
+      "protection_api_and_page": true
+    },
+    "two_scm_agents": {
+      "scenarios_passed": 1,
+      "skipped": 0,
+      "duration_seconds": 184.452,
+      "physical_hosts": 1,
+      "service_instances": 2,
+      "tls_and_telemetry": true,
+      "parallel_tasks_stop_rotation_offline_unknown_recovery": true
+    }
+  },
+  "unverified": [
+    "Clean Windows 11/10 installation and interactive UAC/SmartScreen",
+    "Actual OS reboot",
+    "Two physical additional Windows PCs",
+    "Upgrade from an earlier EXE version (schema upgrade and same-version reinstall checked separately)",
+    "Live Steam GetPlayerBans with an administrator API key",
+    "Telegram delivery to an administrator chat"
+  ],
+  "prediction_available": false,
+  "artifact_provenance": {
+    "artifact_id": 13355207474,
+    "url": "https://github.com/boyyhbm/Farm/actions/runs/41892308025/artifacts/13355207474",
+    "archive_sha256": "56fd1d41d2c41a34286a59f9c39fc5e4f72f66eeff32259c56d7fcd7dc63c516",
+    "native_exe_hashes": "build-manifest.json; export workflow verifies each EXE before release upload",
+    "signed": false
+  }
+}
