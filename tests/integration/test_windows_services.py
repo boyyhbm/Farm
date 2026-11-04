@@ -85,6 +85,51 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
             if response.exists()
             else {}
         )
+        if result.returncode != 0 or not answer.get("ok"):
+            protected = (
+                Path(os.environ["ProgramFiles"]) / "CS2FarmAgent" / name / "runtime"
+            )
+            for candidate in (
+                protected.parent,
+                protected,
+                protected / "python.exe",
+                protected / "desktop_entry.py",
+            ):
+                permissions = subprocess.run(
+                    ["icacls", str(candidate)],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                )
+                print(permissions.stdout)
+            executable = protected / (
+                "farm-runtime.exe" if frozen.exists() else "python.exe"
+            )
+            if executable.exists():
+                try:
+                    probe = subprocess.run(
+                        [
+                            str(executable),
+                            *(
+                                []
+                                if frozen.exists()
+                                else [str(protected / "desktop_entry.py")]
+                            ),
+                            "--help",
+                        ],
+                        capture_output=True,
+                        timeout=20,
+                        check=False,
+                    )
+                    print(
+                        "Protected runtime local probe:",
+                        probe.returncode,
+                        probe.stderr.decode(errors="replace")[:2000],
+                    )
+                except OSError as exc:
+                    print(
+                        "Protected runtime local probe:", type(exc).__name__, str(exc)
+                    )
         assert result.returncode == 0 and answer.get("ok"), answer.get(
             "error", result.stderr.decode(errors="replace")
         )
