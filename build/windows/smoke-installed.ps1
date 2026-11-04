@@ -26,7 +26,21 @@ function Wait-ProcessResult([string]$Program,[string[]]$Arguments,[int]$Seconds=
         $Process.Kill()
         throw "Timed out waiting for $Program"
     }
-    if ($Process.ExitCode -ne 0) { throw "$Program exited $($Process.ExitCode)" }
+    if ($Process.ExitCode -ne 0) {
+        $ResultIndex = [Array]::IndexOf($Arguments,'--result')
+        if ($ResultIndex -ge 0 -and $ResultIndex + 1 -lt $Arguments.Length) {
+            $ResultFile = $Arguments[$ResultIndex + 1].Trim([char]34)
+            if (Test-Path $ResultFile) {
+                $FailedSmoke = Get-Content $ResultFile -Raw
+                Write-Output $FailedSmoke
+                $FailedData = ($FailedSmoke | ConvertFrom-Json).dataDirectory
+                if ($FailedData -and (Test-Path (Join-Path $FailedData 'supervisor.log'))) {
+                    Get-Content (Join-Path $FailedData 'supervisor.log') -Tail 40 | Write-Output
+                }
+            }
+        }
+        throw "$Program exited $($Process.ExitCode)"
+    }
 }
 function Find-BundledRuntime([string]$InstallDir) {
     $RuntimeDir = Join-Path $InstallDir 'resources\runtime\farm-runtime'
