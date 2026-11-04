@@ -50,3 +50,9 @@ Agent setup offers an actual LocalSystem SCM service through UAC, with separatel
 ## Artifacts actually produced in this session
 
 Both genuine unsigned NSIS installers were cross-compiled successfully on Linux. Their full container CRC, declared size and PE structure pass verification; hashes and exact byte counts are recorded in `docs/windows-artifact-verification.json`. Current Windows execution results are recorded in the verification report; this historical cross-build inspection alone does not establish runtime success. Limited disk required discarding only regenerable build inputs and retrying NSIS packaging using hard-linked shared Electron/runtime inputs; the delivered EXEs contain complete independent data, not external links. `build/windows/repack-existing-manager.py` records this retry procedure. Native Windows CI remains the installation verification path.
+
+## Verified native release — 2026-11-04
+
+[Run 41759035951](https://github.com/boyyhbm/Farm/actions/runs/41759035951) completed successfully with unchanged embedded installer bytes: 74 Python tests passed, 1 non-Windows contract skipped, 13 Node tests passed, 22 installation checks and the executed two-SCM-service scenario passed. Exact hashes, limitations and reports are in [windows-desktop-verification.md](windows-desktop-verification.md).
+
+`windows-export-verified.yml` checks successful trusted CI, complete product coverage, a non-skipped SCM scenario, no diagnostic source overlay and exact EXE hashes before creating/uploading a draft. GitHub may deny an Actions token permission to create a historical release tag; a repository owner can pre-create the matching draft in GitHub Releases. The workflow accepts only a draft targeting the exact tested build commit. No user credentials are copied into CI.
