@@ -391,7 +391,12 @@ def test_graphical_runtime_secure_listener_and_real_agent(tmp_path, monkeypatch)
             )
             for _ in range(100):
                 node = client.get("/api/v1/nodes/" + enrolled["node_id"]).json()
-                if node["status"] == "online":
+                # Connection heartbeat can arrive before the first sensor sample.
+                # Validate readiness only after real RAM telemetry has arrived.
+                if (
+                    node["status"] == "online"
+                    and node.get("metrics", {}).get("ram_available_gb") is not None
+                ):
                     break
                 if agent.poll() is not None:
                     raise AssertionError((tmp_path / "agent.log").read_text())
