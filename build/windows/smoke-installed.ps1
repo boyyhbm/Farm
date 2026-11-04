@@ -17,6 +17,7 @@ $Report = [ordered]@{
 }
 function Record([string]$Name,[bool]$Passed,[string]$Details='') {
     $Report.checks += @{name=$Name; passed=$Passed; details=$Details}
+    Write-Output ("WINDOWS_CHECK {0}: {1}" -f $Name,$Passed)
     if (!$Passed) { throw "$Name failed: $Details" }
 }
 function Wait-ProcessResult([string]$Program,[string[]]$Arguments,[int]$Seconds=240) {
@@ -118,4 +119,5 @@ try {
     throw
 } finally {
     [IO.File]::WriteAllText((Join-Path $Output 'installer-smoke.json'), ($Report | ConvertTo-Json -Depth 8), [Text.UTF8Encoding]::new($false))
+    Write-Output ($Report | ConvertTo-Json -Depth 8)
 }

@@ -183,6 +183,9 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 assert "program files" in answer["image_path"].lower()
                 node_ids.append(answer["node_id"])
             assert len(set(node_ids)) == 2
+            print(
+                "WINDOWS_CHECK two SYSTEM services installed with distinct enrollment"
+            )
 
             def node(node_id):
                 response = client.get("/api/v1/nodes/" + node_id)
@@ -198,6 +201,8 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                     ),
                 )
                 assert result["agent_version"]
+
+            print("WINDOWS_CHECK real WSS telemetry from both services")
 
             def jobs():
                 return client.get("/api/v1/jobs?limit=100").json()["items"]
@@ -237,6 +242,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
             assert (
                 len({s["node_id"] for s in sessions if s["status"] == "RUNNING"}) == 2
             )
+            print("WINDOWS_CHECK parallel RUNNING on two nodes")
             for session in sessions:
                 if session["job_id"] in parallel:
                     response = client.post(
@@ -254,6 +260,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 ).status_code
                 == 200
             )
+            print("WINDOWS_CHECK controlled stop and round-robin policy")
             rotation = [create(duration=1) for _ in range(4)]
             wait_value(
                 jobs,
@@ -272,6 +279,9 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 s["resource_usage"].get("synthetic")
                 and s["resource_usage"].get("steps", 0) > 0
                 for s in rotated
+            )
+            print(
+                "WINDOWS_CHECK four completed synthetic jobs rotated across both nodes"
             )
             # Suspend one SCM host to simulate network/heartbeat loss while engine lives.
             recovery_job = create(node_ids[0], 180)
@@ -305,6 +315,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 == 200
             )
             wait_value(lambda: job(blocked), lambda j: j["status"] == "COMPLETED")
+            print("WINDOWS_CHECK UNKNOWN and reconciliation after heartbeat loss")
             # Both services reconnect after the actual bundled backend is stopped/restarted.
             server.stdin.write(b"shutdown\n")
             server.stdin.flush()
@@ -321,6 +332,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                 )
             final_job = create(duration=1)
             wait_value(lambda: job(final_job), lambda j: j["status"] == "COMPLETED")
+            print("WINDOWS_CHECK both services reconnect after backend restart")
             # Real protected runtime replacement retains both SYSTEM identities.
             for name, node_id in zip(names, node_ids, strict=True):
                 before_heartbeat = node(node_id)["last_heartbeat"]
@@ -332,6 +344,7 @@ def test_two_installed_system_services_dispatch_stop_rotate_and_reconnect(tmp_pa
                         n["status"] == "online" and n["last_heartbeat"] != before
                     ),
                 )
+            print("WINDOWS_CHECK service runtime replacement preserves identities")
             assert client.get("/api/v1/logs").json()["total"] > 0
     finally:
         for name in reversed(installed):
