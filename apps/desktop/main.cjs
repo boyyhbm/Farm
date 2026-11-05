@@ -123,6 +123,11 @@ function state() {
   return { ...supervisor.snapshot(), configured: !!config, config, product: { name: app.getName(), version: app.getVersion(), defaultMode: product.defaultMode, agentOnly: !!product.agentOnly }, system: supervisor.check(config?.mode || product.defaultMode || 'server'), update: updateResult };
 }
 function createIpc() {
+  ipcMain.handle('farm:open-steam', async event => {
+    if (!dashboard || event.sender !== dashboard.webContents || new URL(event.senderFrame?.url || 'about:blank').origin !== ORIGIN || config?.mode !== 'server') throw new Error('Untrusted dashboard IPC sender');
+    await shell.openExternal('steam://open/main');
+    return { status: 'owner_action_required' };
+  });
   ipcMain.handle('farm:open-system', event => {
     if (!dashboard || event.sender !== dashboard.webContents || new URL(event.senderFrame?.url || 'about:blank').origin !== ORIGIN || config?.mode !== 'server') throw new Error('Untrusted dashboard IPC sender');
     showManagement();
@@ -313,6 +318,42 @@ async function smokeTest() {
     const health = await fetch(`${ORIGIN}/api/v1/protection/health/accounts`, { headers: { Cookie: cookie } });
     if (!health.ok || !(await health.json()).items.some(value => value.id === account.id && value.health?.source === 'protection_engine_v2_derived')) throw new Error('Account Health API missing');
     check('packaged_safety_engine_v2_health_and_component_checks');
+    const vaultCall = async (route, body, method = 'POST', extra = {}) => {
+      const response = await fetch(`${ORIGIN}/api/v1/vault${route}`, { method, headers: { ...headers, ...extra }, ...(method === 'GET' ? {} : { body: typeof body === 'string' ? body : JSON.stringify(body) }) });
+      if (!response.ok) throw new Error(`Vault smoke ${route} HTTP ${response.status}`);
+      return response.json();
+    };
+    await vaultCall('/unlock', { password });
+    const importStage = await vaultCall('/imports', { confirmed: true });
+    const syntheticPassword = 'Synthetic-vault-' + crypto.randomBytes(16).toString('hex');
+    const guardSecret = crypto.randomBytes(20).toString('base64');
+    const csv = `login,password,steam_id\nvault_native_smoke,${syntheticPassword},76561199999888883\n`;
+    const preview = await vaultCall(`/imports/${importStage.id}/files?kind=csv`, csv.replaceAll('\\n', '\n'), 'POST', { 'Content-Type': 'application/octet-stream' });
+    if (JSON.stringify(preview).includes(syntheticPassword) || preview.total !== 1) throw new Error('Vault preview did not mask credentials');
+    const guardFile = JSON.stringify({ account_name: 'vault_native_smoke', shared_secret: guardSecret, identity_secret: crypto.randomBytes(20).toString('base64'), Session: { SteamID: '76561199999888883' } });
+    const mapped = await vaultCall(`/imports/${importStage.id}/files?kind=mafile`, guardFile, 'POST', { 'Content-Type': 'application/octet-stream' });
+    if (JSON.stringify(mapped).includes(guardSecret) || mapped.total !== 1 || mapped.items[0].guard_status !== 'PRESENT') throw new Error('Vault Guard mapping failed');
+    await vaultCall(`/imports/${importStage.id}/commit`, { confirmed: true });
+    let imported;
+    for (let attempt = 0; attempt < 100; attempt++) {
+      imported = (await vaultCall('/imports', undefined, 'GET')).items.find(row => row.id === importStage.id);
+      if (imported?.status === 'COMPLETED') break;
+      if (imported?.status === 'FAILED' || imported?.status === 'COMPLETED_WITH_ERRORS') throw new Error('Vault background import failed');
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+    if (imported?.imported !== 1) throw new Error('Vault background import did not finish');
+    let vaultRows = (await vaultCall('/records', undefined, 'GET')).items;
+    if (vaultRows.length !== 1 || vaultRows[0].guard_status !== 'LINKED' || JSON.stringify(vaultRows).includes(syntheticPassword) || JSON.stringify(vaultRows).includes(guardSecret)) throw new Error('Vault metadata leaked or lost credentials');
+    await supervisor.restart();
+    const lockedVault = await vaultCall('/status', undefined, 'GET');
+    if (lockedVault.unlocked) throw new Error('Vault remained unlocked after backend restart');
+    await vaultCall('/unlock', { password });
+    const checkedVault = await vaultCall('/records/bulk', { confirmed: true, operation: 'validate', ids: [vaultRows[0].id] });
+    if (checkedVault.results[0].code !== 'OK') throw new Error('Windows DPAPI/AES vault did not persist and decrypt after restart');
+    const vaultWindow = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true } });
+    await vaultWindow.loadURL(ORIGIN + '/authentication'); vaultWindow.destroy();
+    check('packaged_account_vault_dpapi_import_restart_and_secret_free_responses');
+
     const diagnostic = await diagnose(supervisor, { mode: 'server' }, app.getVersion());
     if (!diagnostic.passed) throw new Error('Packaged GUI diagnosis failed: ' + JSON.stringify(diagnostic.checks));
     check('graphical_self_diagnostics_all_automatic_checks');

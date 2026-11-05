@@ -275,7 +275,7 @@ def main():
                     "productName": "CS2 Farm Agent"
                     if product == "agent"
                     else "CS2 Farm Manager",
-                    "version": "0.4.0",
+                    "version": "0.5.0",
                 }
             )
         )

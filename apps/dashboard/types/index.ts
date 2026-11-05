@@ -14,6 +14,7 @@ export type User = {
 export type Section =
   | "dashboard"
   | "accounts"
+  | "authentication"
   | "nodes"
   | "sessions"
   | "scheduler"

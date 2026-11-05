@@ -26,6 +26,7 @@ import {
   Menu,
   X,
   ShieldCheck,
+  KeyRound,
   Activity,
   ChevronRight,
   CheckCircle2,
@@ -57,9 +58,12 @@ import { money, date } from "@/lib/utils";
 import type { User, Page, Row, Field, Section } from "@/types";
 import { HealthBadge } from "@/components/health-badge";
 import Protection, { ProtectionSummary } from "@/components/protection";
+import dynamic from "next/dynamic";
+const AccountVault = dynamic(() => import("@/components/account-vault"));
 const menu = [
   { id: "dashboard", icon: LayoutDashboard, en: "Overview", ru: "Обзор" },
   { id: "accounts", icon: Users, en: "Accounts", ru: "Аккаунты" },
+  { id: "authentication", icon: KeyRound, en: "Authentication", ru: "Авторизация" },
   { id: "nodes", icon: Monitor, en: "Nodes", ru: "Компьютеры" },
   { id: "sessions", icon: Play, en: "Sessions", ru: "Сессии" },
   { id: "scheduler", icon: CalendarClock, en: "Scheduler", ru: "Планировщик" },
@@ -1049,6 +1053,7 @@ export default function FarmDashboard({ initialSection }: { initialSection?: Sec
           )}
           {section === "dashboard" && <ProtectionSummary ru={ru} onOpen={() => setSection("protection")} />}
           {section === "protection" && <Protection ru={ru} role={me.data?.role || "viewer"} />}
+          {section === "authentication" && <AccountVault ru={ru} role={me.data?.role || "viewer"} nodes={items(nodes.data)} groups={groups.data?.items || []} onInventory={id => { setAccountId(id); setSection("inventory"); }} />}
           {section === "dashboard" && (
             <>
               {overview.error && (
@@ -1352,13 +1357,14 @@ export default function FarmDashboard({ initialSection }: { initialSection?: Sec
                     </Button>
                     {canWrite && (
                       <>
+                        {me.data?.role === "admin" && <Button size="sm" variant="secondary" onClick={() => setSection("authentication")}><KeyRound size={14} />{t("Импорт аккаунтов", "Import Accounts")}</Button>}
                         <Button
                           size="sm"
                           variant="secondary"
                           onClick={() => fileInput.current?.click()}
                         >
                           <Upload size={14} />
-                          CSV
+                          {t("CSV метаданных", "Metadata CSV")}
                         </Button>
                         <Button
                           size="sm"

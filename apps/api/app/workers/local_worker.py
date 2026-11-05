@@ -30,6 +30,7 @@ class DesktopWorker:
             (self.inventory_loop, "desktop-inventory"),
             (self.protection_loop, "desktop-protection"),
             (self.safety_loop, "desktop-safety"),
+            (self.vault_loop, "desktop-vault"),
         ):
             t = threading.Thread(target=target, name=name, daemon=True)
             t.start()
@@ -208,3 +209,12 @@ class DesktopWorker:
             except Exception:
                 log.exception("Independent safety engine cycle failed")
             self.stop_event.wait(5)
+
+    def vault_loop(self):
+        from app.services.vault import tick
+        while not self.stop_event.is_set():
+            try:
+                tick()
+            except Exception:
+                log.error("Vault maintenance failed; no credential details logged")
+            self.stop_event.wait(1)

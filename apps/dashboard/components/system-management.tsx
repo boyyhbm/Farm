@@ -28,7 +28,7 @@ type Diagnostics = {
 
 declare global {
   interface Window {
-    farmDesktop?: { openSystem: () => Promise<unknown> };
+    farmDesktop?: { openSystem: () => Promise<unknown>; openSteam?: () => Promise<unknown> };
   }
 }
 

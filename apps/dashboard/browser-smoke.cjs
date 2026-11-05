@@ -57,6 +57,7 @@ const env = Object.fromEntries(
   });
   for (const label of [
     "Аккаунты",
+    "Авторизация",
     "Компьютеры",
     "Сессии",
     "Планировщик",
@@ -128,7 +129,7 @@ const env = Object.fromEntries(
   await engine
     .getByRole("heading", { name: "Account Health", exact: true })
     .waitFor();
-  await engine.getByRole("button", { name: "Объяснение", exact: true }).click();
+  await engine.getByRole("row").filter({ hasText: "76561199999888881" }).getByRole("button", { name: "Объяснение", exact: true }).click();
   await engine
     .getByRole("heading", { name: "Обоснование состояния", exact: true })
     .waitFor();
@@ -237,7 +238,7 @@ const env = Object.fromEntries(
   await page.getByRole("heading", { name: "Аккаунты", exact: true }).waitFor();
   const result = {
     checked_at: new Date().toISOString(),
-    sections: 12,
+    sections: 13,
     protection_manual_hold_history_and_release: true,
     protection_v2_health_evidence_policy_and_csv_export: true,
     system_management_status: true,

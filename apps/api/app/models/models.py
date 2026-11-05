@@ -594,3 +594,35 @@ class ProtectionEngineState(Base):
     accounts_evaluated: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
     __table_args__ = (CheckConstraint("id = 1"),)
+
+
+class VaultRecord(Identified, Created, Base):
+    """Only non-sensitive metadata. Ciphertexts live exclusively on the owner PC."""
+    __tablename__ = "vault_records"
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    login: Mapped[str] = mapped_column(String(100))
+    login_key: Mapped[str] = mapped_column(String(100))
+    account_id: Mapped[str | None] = mapped_column(ForeignKey("steam_accounts.id", ondelete="SET NULL"), nullable=True, index=True)
+    has_password: Mapped[bool] = mapped_column(Boolean, default=False)
+    has_guard: Mapped[bool] = mapped_column(Boolean, default=False)
+    revision: Mapped[str] = mapped_column(String(36))
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_attempt: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_auth_error: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    __table_args__ = (UniqueConstraint("owner_id", "login_key"), UniqueConstraint("owner_id", "account_id"))
+
+
+class VaultImport(Identified, Created, Base):
+    __tablename__ = "vault_imports"
+    owner_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True)
+    auth_session_id: Mapped[str] = mapped_column(String(36))
+    status: Mapped[str] = mapped_column(String(30), default="QUEUED", index=True)
+    total: Mapped[int] = mapped_column(Integer, default=0)
+    processed: Mapped[int] = mapped_column(Integer, default=0)
+    imported: Mapped[int] = mapped_column(Integer, default=0)
+    skipped: Mapped[int] = mapped_column(Integer, default=0)
+    errors: Mapped[list] = mapped_column(JSON, default=list)
+    group_id: Mapped[str | None] = mapped_column(ForeignKey("account_groups.id"), nullable=True)
+    node_id: Mapped[str | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

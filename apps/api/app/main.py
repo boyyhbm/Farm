@@ -158,9 +158,13 @@ async def lifespan(app):
     finally:
         if worker:
             await asyncio.to_thread(worker.stop)
+        from app.services import vault
+        if vault._store:
+            for vault_session in list(vault._store.grants):
+                vault._store.lock(vault_session)
 
 
-app = FastAPI(title="CS2 Farm Manager", version="0.4.0", lifespan=lifespan)
+app = FastAPI(title="CS2 Farm Manager", version="0.5.0", lifespan=lifespan)
 
 
 from app.api_protection import router as protection_router
@@ -170,6 +174,28 @@ app.include_router(protection_router)
 from app.api_safety import router as safety_router
 
 app.include_router(safety_router)
+from app.api_vault import router as vault_router
+from app.services.vault_crypto import VaultProblem
+from app.services.vault_import import ImportProblem
+from fastapi.exceptions import RequestValidationError
+from fastapi.exception_handlers import request_validation_exception_handler
+app.include_router(vault_router)
+
+
+@app.exception_handler(VaultProblem)
+@app.exception_handler(ImportProblem)
+async def vault_error(request, exc):
+    code = exc.code
+    status = 423 if code == 'VAULT_LOCKED' else 503 if code in ('WINDOWS_DPAPI_REQUIRED','LOCAL_WINDOWS_DESKTOP_REQUIRED','VAULT_KEY_UNAVAILABLE') else 422
+    return JSONResponse(status_code=status, content={'detail':code,'code':code})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error(request, exc):
+    if request.url.path.startswith('/api/v1/vault'):
+        return JSONResponse(status_code=422,content={'detail':'INVALID_VAULT_REQUEST'})
+    return await request_validation_exception_handler(request, exc)
+
 
 
 @app.exception_handler(ProtectionDenied)
@@ -237,7 +263,7 @@ async def headers_and_limits(request, call_next):
             )
         if (
             request.headers.get("content-length", "0").isdigit()
-            and int(request.headers.get("content-length", "0") or 0) > 5_000_000
+            and int(request.headers.get("content-length", "0") or 0) > (32 * 1024 * 1024 if request.url.path.startswith("/api/v1/vault/imports/") and request.url.path.endswith("/files") else 5_000_000)
         ):
             return JSONResponse(status_code=413, content={"detail": "Body too large"})
     response = await call_next(request)
@@ -351,6 +377,11 @@ def logout(
     user=Depends(authenticate),
     db: DBSession = Depends(get_db),
 ):
+    from app.services import vault
+    try:
+        vault.get_store().lock(request.state.auth_session.id)
+    except VaultProblem:
+        pass
     db.delete(request.state.auth_session)
     audit(db, user.username, "auth.logout")
     db.commit()
@@ -1167,7 +1198,7 @@ def get_settings(user=Depends(authenticate)):
         "node_offline_seconds": settings().node_offline_seconds,
         "retention_days": settings().retention_days,
         "manual_steam_login_required": True,
-        "version": "0.4.0",
+        "version": "0.5.0",
     }
 
 
@@ -1509,8 +1540,8 @@ def system_status(user=Depends(authenticate)):
     )
     return {
         "mode": "desktop" if desktop else "server",
-        "version": "0.4.0",
-        "backend": {"status": "ready", "version": "0.4.0"},
+        "version": "0.5.0",
+        "backend": {"status": "ready", "version": "0.5.0"},
         "database": {
             "engine": "sqlite" if desktop else "postgresql",
             "status": checks["database"],
