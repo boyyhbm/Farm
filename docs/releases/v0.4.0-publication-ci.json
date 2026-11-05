@@ -1,0 +1,69 @@
+{
+  "run_id": 41940351647,
+  "url": "https://github.com/boyyhbm/Farm/actions/runs/41940351647",
+  "status": "completed",
+  "conclusion": "success",
+  "workflow_source_commit": "cfd4b8e7927400cd3db415f10b65c084775cc266",
+  "application_source_commit": "8063127f52af7c9a76851646a984cabfbb305d53",
+  "checks": [
+    {
+      "name": "Set up job",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/checkout@v4",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/setup-python@v5",
+      "conclusion": "success"
+    },
+    {
+      "name": "Require successful trusted native build and installed validation",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/download-artifact@v4",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/download-artifact@v4",
+      "conclusion": "success"
+    },
+    {
+      "name": "Require complete smoke coverage and exact EXE hashes",
+      "conclusion": "success"
+    },
+    {
+      "name": "Inspect decompressed installers, release files and exact source for secrets",
+      "conclusion": "success"
+    },
+    {
+      "name": "Publish public pre-release after all checks",
+      "conclusion": "success"
+    },
+    {
+      "name": "Verify anonymous public download of both complete EXEs",
+      "conclusion": "success"
+    },
+    {
+      "name": "Run actions/upload-artifact@v4",
+      "conclusion": "success"
+    },
+    {
+      "name": "Post Run actions/setup-python@v5",
+      "conclusion": "success"
+    },
+    {
+      "name": "Post Run actions/checkout@v4",
+      "conclusion": "success"
+    },
+    {
+      "name": "Complete job",
+      "conclusion": "success"
+    }
+  ],
+  "existing_release_id": 434595753,
+  "published_exe_bytes_preserved": true,
+  "public_security_reports_downloaded_without_github_authorization": true
+}
