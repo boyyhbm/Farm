@@ -1,0 +1,33 @@
+{
+  "checked_at": "2026-11-05T00:15:58.933640+00:00",
+  "repository": "boyyhbm/Farm",
+  "release_id": 434595753,
+  "tag": "v0.4.0",
+  "release_url": "https://github.com/boyyhbm/Farm/releases/tag/v0.4.0",
+  "draft": false,
+  "prerelease": true,
+  "verification": "Full HTTP GET and SHA-256 with no GitHub Authorization header or cookies",
+  "installers": [
+    {
+      "filename": "CS2-Farm-Manager-Setup.exe",
+      "url": "https://github.com/boyyhbm/Farm/releases/download/v0.4.0/CS2-Farm-Manager-Setup.exe",
+      "http_status": 200,
+      "downloaded_bytes": 448426990,
+      "sha256": "b5bdb9a9a606995b75f167e2ac31b0cb6e170aa1575fa121f4794bb8fe624442",
+      "github_authentication_sent": false,
+      "cookies_sent": false,
+      "passed": true
+    },
+    {
+      "filename": "CS2-Farm-Agent-Setup.exe",
+      "url": "https://github.com/boyyhbm/Farm/releases/download/v0.4.0/CS2-Farm-Agent-Setup.exe",
+      "http_status": 200,
+      "downloaded_bytes": 204514312,
+      "sha256": "412e3082e4006be2b14d42d2665cb5339b9305999b693134b75e15891bb784c5",
+      "github_authentication_sent": false,
+      "cookies_sent": false,
+      "passed": true
+    }
+  ],
+  "passed": true
+}

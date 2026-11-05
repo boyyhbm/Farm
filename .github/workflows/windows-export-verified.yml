@@ -1,97 +1,166 @@
-name: Export verified Windows installers
+name: Publish verified Windows pre-releases
 on:
   workflow_dispatch:
     inputs:
       build_run_id:
-        description: Original Windows build run with genuine EXEs
+        description: Successful native Windows build run containing both EXEs
         required: true
         type: string
       validation_run_id:
         description: Successful complete installed application validation run
         required: true
         type: string
+  workflow_run:
+    workflows: ['Windows desktop installers']
+    types: [completed]
 permissions:
   actions: read
   contents: write
+concurrency:
+  group: windows-prerelease-publication
+  cancel-in-progress: false
 jobs:
-  export-draft:
+  publish-prerelease:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.event != 'pull_request' &&
+       (github.event.workflow_run.head_branch == 'main' || startsWith(github.event.workflow_run.head_branch, 'desktop-v')))
     runs-on: windows-2022
-    timeout-minutes: 15
+    timeout-minutes: 20
     env:
       GH_TOKEN: ${{ github.token }}
-      BUILD_RUN: ${{ inputs.build_run_id }}
-      VALIDATION_RUN: ${{ inputs.validation_run_id }}
+      BUILD_RUN: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.build_run_id }}
+      VALIDATION_RUN: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.id || inputs.validation_run_id }}
     steps:
       - uses: actions/checkout@v4
-      - name: Require a successful completed Windows validation
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require successful trusted native build and installed validation
         shell: pwsh
         run: |
+          $Build = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $Build.status -ne 'completed' -or $Build.conclusion -ne 'success' -or $Build.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $Build.path -ne '.github/workflows/windows-desktop.yml' -or $Build.event -notin @('push','workflow_dispatch')) { throw 'Successful trusted native build required; pull requests cannot publish.' }
+          if ($Build.head_branch -ne 'main' -and $Build.head_branch -notmatch '^desktop-v[0-9]') { throw 'Only main or desktop version tags may publish.' }
           $Run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN" | ConvertFrom-Json
-          if ($LASTEXITCODE -ne 0 -or $Run.status -ne 'completed' -or $Run.conclusion -ne 'success' -or $Run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $Run.path -notin @('.github/workflows/windows-validate-existing.yml','.github/workflows/windows-desktop.yml')) { throw 'Complete successful trusted Windows validation required.' }
-          if ($Run.path -eq '.github/workflows/windows-desktop.yml' -and $env:VALIDATION_RUN -ne $env:BUILD_RUN) { throw 'Native build validation must refer to that same build run.' }
+          if ($LASTEXITCODE -ne 0 -or $Run.status -ne 'completed' -or $Run.conclusion -ne 'success' -or $Run.head_repository.full_name -ne $env:GITHUB_REPOSITORY -or $Run.path -notin @('.github/workflows/windows-validate-existing.yml','.github/workflows/windows-desktop.yml') -or $Run.event -notin @('push','workflow_dispatch')) { throw 'Successful trusted installed validation required.' }
+          if ($Run.head_branch -ne 'main' -and $Run.head_branch -notmatch '^desktop-v[0-9]') { throw 'Validation must also come from main or a desktop version tag.' }
+          if ($Run.path -eq '.github/workflows/windows-desktop.yml' -and $env:VALIDATION_RUN -ne $env:BUILD_RUN) { throw 'Native validation must refer to that same build.' }
+          "SOURCE_COMMIT=$($Build.head_sha)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
       - uses: actions/download-artifact@v4
         with:
           name: CS2-Farm-Windows-x64
           path: artifacts/build
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.build_run_id }}
+          run-id: ${{ env.BUILD_RUN }}
       - uses: actions/download-artifact@v4
         with:
           name: Windows-verification
           path: artifacts/verification
           github-token: ${{ github.token }}
-          run-id: ${{ inputs.validation_run_id }}
-      - name: Verify provenance, complete coverage and exact EXE hashes
+          run-id: ${{ env.VALIDATION_RUN }}
+      - name: Require complete smoke coverage and exact EXE hashes
         shell: pwsh
         run: |
           if (!(Test-Path artifacts/verification/validation-provenance.json)) {
             if ($env:BUILD_RUN -ne $env:VALIDATION_RUN) { throw 'Missing verification provenance.' }
-            $Run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN" | ConvertFrom-Json
-            @{build_run=$env:BUILD_RUN; driver_commit=$Run.head_sha; os='Windows Server 2022'; clean_windows11=$false; validation='native build, installation, smoke and uninstall in same run'} | ConvertTo-Json | Set-Content artifacts/verification/validation-provenance.json -Encoding utf8
+            @{build_run=$env:BUILD_RUN; driver_commit=$env:SOURCE_COMMIT; os='Windows Server 2022'; clean_windows11=$false; validation='native build, installation, smoke and uninstall in same run'} | ConvertTo-Json | Set-Content artifacts/verification/validation-provenance.json -Encoding utf8
           }
           $Provenance = Get-Content artifacts/verification/validation-provenance.json -Raw | ConvertFrom-Json
           $Smoke = Get-Content artifacts/verification/installer-smoke.json -Raw | ConvertFrom-Json
-          if ([string]$Provenance.build_run -ne [string]$env:BUILD_RUN -or !$Smoke.passed -or $Smoke.products -ne 'all' -or $Smoke.diagnostic_source_overlay) { throw 'Validation does not cover this build and both products.' }
-          $Required = @('installed_manager_smoke','repair_install_preserves_all_database_rows','manager_relaunches_persisted_database_after_reinstall','two_real_scm_agents','manager_program_removed','agent_program_removed')
-          foreach ($Name in $Required) {
-            if (!($Smoke.checks | Where-Object { $_.name -eq $Name -and $_.passed })) { throw "Missing successful installed check: $Name" }
+          if ([string]$Provenance.build_run -ne [string]$env:BUILD_RUN -or !$Smoke.passed -or $Smoke.products -ne 'all' -or $Smoke.diagnostic_source_overlay) { throw 'Validation must cover both original products without source overlay.' }
+          foreach ($Name in @('installed_manager_smoke','repair_install_preserves_all_database_rows','manager_relaunches_persisted_database_after_reinstall','two_real_scm_agents','manager_program_removed','agent_program_removed')) {
+            if (!($Smoke.checks | Where-Object { $_.name -eq $Name -and $_.passed })) { throw "Missing installed check: $Name" }
           }
           $Manager = Get-Content artifacts/verification/manager-smoke.json -Raw | ConvertFrom-Json
-          if (!($Manager.checks | Where-Object { $_.name -eq 'packaged_safety_engine_v2_health_and_component_checks' -and $_.passed })) { throw 'Protection Engine 2.0 must be exercised in the actual installed Manager.' }
+          if (!$Manager.passed -or !($Manager.checks | Where-Object { $_.name -eq 'packaged_safety_engine_v2_health_and_component_checks' -and $_.passed })) { throw 'Installed Safety Engine validation required.' }
           [xml]$JUnit = Get-Content artifacts/verification/windows-services.xml -Raw
           $Suite = $JUnit.testsuites.testsuite
-          if ([int]$Suite.tests -ne 1 -or [int]$Suite.skipped -ne 0 -or [int]$Suite.failures -ne 0 -or [int]$Suite.errors -ne 0) { throw 'An executed successful SCM integration test is required.' }
+          if ([int]$Suite.tests -ne 1 -or [int]$Suite.skipped -ne 0 -or [int]$Suite.failures -ne 0 -or [int]$Suite.errors -ne 0) { throw 'Executed successful SCM scenario required.' }
           $Manifest = Get-Content artifacts/build/build-manifest.json -Raw | ConvertFrom-Json
           $Signatures = @{}
+          New-Item artifacts/publish -ItemType Directory -Force | Out-Null
           foreach ($Product in @('manager','agent')) {
             $Name = if ($Product -eq 'manager') {'CS2-Farm-Manager-Setup.exe'} else {'CS2-Farm-Agent-Setup.exe'}
-            if ((Get-FileHash "artifacts/build/$Product/$Name" -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Manifest.artifacts.$Name.sha256) { throw "EXE SHA256 mismatch: $Name" }
-            $Signature = Get-AuthenticodeSignature "artifacts/build/$Product/$Name"
+            $File = "artifacts/build/$Product/$Name"
+            if ((Get-FileHash $File -Algorithm SHA256).Hash.ToLowerInvariant() -ne $Manifest.artifacts.$Name.sha256 -or (Get-Item $File).Length -ne $Manifest.artifacts.$Name.size_bytes) { throw "EXE integrity mismatch: $Name" }
+            $Signature = Get-AuthenticodeSignature $File
             $Signatures[$Name] = @{status=$Signature.Status.ToString(); signer=if ($Signature.SignerCertificate) {$Signature.SignerCertificate.Subject} else {$null}}
+            Copy-Item $File artifacts/publish/
           }
-          $Signatures | ConvertTo-Json -Depth 4 | Set-Content artifacts/verification/windows-installer-signatures.json -Encoding utf8
-      - name: Create reviewable release draft with exact tested EXEs and reports
+          $Signatures | ConvertTo-Json -Depth 4 | Set-Content artifacts/publish/windows-installer-signatures.json -Encoding utf8
+          Copy-Item artifacts/build/build-manifest.json artifacts/publish/
+          foreach ($Name in @('installer-smoke.json','manager-smoke.json','manager-resume.json','windows-services.xml','validation-provenance.json','python-tests.xml','desktop-unit.log')) { Copy-Item "artifacts/verification/$Name" artifacts/publish/ }
+          Copy-Item docs/WINDOWS-LOCAL-CHECKLIST-RU.md artifacts/publish/
+          $Package = git show "$($env:SOURCE_COMMIT):apps/desktop/package.json" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $Package.version -notmatch '^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$') { throw 'Invalid tested application version.' }
+          "RELEASE_TAG=v$($Package.version)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          @{source_commit=$env:SOURCE_COMMIT; version=$Package.version; build_run=$env:BUILD_RUN; validation_run=$env:VALIDATION_RUN; prerelease=$true; clean_windows11_tested=$false; signatures=$Signatures; artifacts=$Manifest.artifacts} | ConvertTo-Json -Depth 8 | Set-Content artifacts/publish/release-provenance.json -Encoding utf8
+          $Body = @"
+          CS2 Farm Manager $($Package.version) — Pre-release
+
+          Manager and Agent installers include their runtimes; no terminal, Python, Node.js or Docker installation is required for end users.
+          Successful Windows Server 2022 validation: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN
+          Tested source: $env:SOURCE_COMMIT
+          Both EXEs match the native build manifest. Publication requires a secret scan of decompressed NSIS payloads, release files and exact tracked source.
+
+          Clean Windows 10/11, physical additional PCs, actual OS reboot and interactive UAC/SmartScreen remain unverified. See the attached acceptance checklist and reports. Check windows-installer-signatures.json for the observed signing status. SmartScreen is not bypassed.
+          "@
+          [IO.File]::WriteAllText('artifacts/publish/release-notes.md', $Body, [Text.UTF8Encoding]::new($false))
+      - name: Inspect decompressed installers, release files and exact source for secrets
         shell: pwsh
         run: |
-          $Build = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN" | ConvertFrom-Json
-          $Tag = "windows-validated-$env:BUILD_RUN"
-          $Body = @"
-          Actual Windows Server 2022 validation: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:VALIDATION_RUN
-          Original native build: https://github.com/$env:GITHUB_REPOSITORY/actions/runs/$env:BUILD_RUN
-
-          Includes exact SHA-256-verified Manager and Agent installers, installed smoke reports and two real LocalSystem agent services on one Windows host.
-          Unsigned Authenticode. Clean Windows 11, physical additional PCs, actual OS reboot, interactive UAC/SmartScreen and an upgrade from the previous EXE version remain unverified (schema migration is tested). See the included acceptance checklist.
-          This draft does not claim a stable production release or bypass SmartScreen.
-          "@
-          [IO.File]::WriteAllText('artifacts/release-notes.md', $Body, [Text.UTF8Encoding]::new($false))
-          $Existing = gh release view $Tag --repo $env:GITHUB_REPOSITORY --json isDraft,targetCommitish 2>$null
+          python scripts/check-release-secrets.py --installer artifacts/publish/CS2-Farm-Manager-Setup.exe --installer artifacts/publish/CS2-Farm-Agent-Setup.exe --files artifacts/publish --source-commit $env:SOURCE_COMMIT --output artifacts/publish/release-security-scan.json
+          if ($LASTEXITCODE -ne 0) { throw 'Publication blocked by release secret inspection.' }
+      - name: Publish public pre-release after all checks
+        shell: pwsh
+        run: |
+          $Tag = $env:RELEASE_TAG
+          $Existing = gh release view $Tag --repo $env:GITHUB_REPOSITORY --json isDraft,isPrerelease,targetCommitish 2>$null
           if ($LASTEXITCODE -eq 0) {
             $Existing = $Existing | ConvertFrom-Json
-            if (!$Existing.isDraft -or $Existing.targetCommitish -ne $Build.head_sha) { throw 'Existing release is not a matching draft.' }
+            if ($Existing.targetCommitish -ne $env:SOURCE_COMMIT) { throw 'Version already belongs to another source commit; bump the application version.' }
+            if (!$Existing.isDraft) {
+              if (!$Existing.isPrerelease) { throw 'Refusing to alter an existing stable release.' }
+              $Remote = gh api "repos/$env:GITHUB_REPOSITORY/releases/tags/$Tag" | ConvertFrom-Json
+              $Manifest = Get-Content artifacts/publish/build-manifest.json -Raw | ConvertFrom-Json
+              foreach ($Name in @('CS2-Farm-Manager-Setup.exe','CS2-Farm-Agent-Setup.exe')) {
+                $Asset = @($Remote.assets | Where-Object { $_.name -eq $Name })
+                if ($Asset.Count -ne 1 -or $Asset[0].digest -ne "sha256:$($Manifest.artifacts.$Name.sha256)" -or $Asset[0].size -ne $Manifest.artifacts.$Name.size_bytes) { throw 'Published EXE does not match this exact verified build.' }
+              }
+              foreach ($Name in @('release-security-scan.json','release-provenance.json')) {
+                if (!($Remote.assets | Where-Object { $_.name -eq $Name })) {
+                  gh release upload $Tag --repo $env:GITHUB_REPOSITORY "artifacts/publish/$Name"
+                  if ($LASTEXITCODE -ne 0) { throw 'Could not attach publication audit.' }
+                }
+              }
+              Write-Output 'Matching public pre-release already exists; published EXEs preserved.'
+              exit 0
+            }
           } else {
-            gh release create $Tag --repo $env:GITHUB_REPOSITORY --draft --target $Build.head_sha --title 'CS2 Farm Manager 0.4.0 — Protection Engine 2.0 Windows validation' --notes-file artifacts/release-notes.md
-            if ($LASTEXITCODE -ne 0) { throw 'Could not create draft release. A repository owner may pre-create the matching draft in GitHub Releases.' }
+            gh release create $Tag --repo $env:GITHUB_REPOSITORY --draft --target $env:SOURCE_COMMIT --title "CS2 Farm Manager $Tag — Pre-release" --notes-file artifacts/publish/release-notes.md
+            if ($LASTEXITCODE -ne 0) { throw 'Draft creation denied. An owner can pre-create this version draft targeting the tested commit; publication remains blocked until then.' }
           }
-          gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber artifacts/build/manager/CS2-Farm-Manager-Setup.exe artifacts/build/agent/CS2-Farm-Agent-Setup.exe artifacts/build/build-manifest.json artifacts/verification/installer-smoke.json artifacts/verification/manager-smoke.json artifacts/verification/manager-resume.json artifacts/verification/windows-services.xml artifacts/verification/validation-provenance.json artifacts/verification/windows-installer-signatures.json docs/WINDOWS-LOCAL-CHECKLIST-RU.md docs/PROTECTION-RU.md docs/FARM-PROTECTION-ENGINE-2-RU.md docs/FARM-PROTECTION-ENGINE-2-VALIDATION-RU.md docs/protection-validation.json docs/windows-native-verification.json docs/windows-artifact-verification.json artifacts/verification/python-tests.xml artifacts/verification/desktop-unit.log
-          if ($LASTEXITCODE -ne 0) { throw 'Draft asset upload failed.' }
-          gh release view $Tag --repo $env:GITHUB_REPOSITORY --json url,assets,isDraft
+          $Files = @(Get-ChildItem artifacts/publish -File | ForEach-Object FullName)
+          gh release upload $Tag --repo $env:GITHUB_REPOSITORY --clobber @Files
+          if ($LASTEXITCODE -ne 0) { throw 'Asset upload failed; release remains a draft.' }
+          gh release edit $Tag --repo $env:GITHUB_REPOSITORY --draft=false --prerelease --latest=false --notes-file artifacts/publish/release-notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Pre-release publication failed.' }
+      - name: Verify anonymous public download of both complete EXEs
+        shell: pwsh
+        run: |
+          python scripts/verify-public-release.py --repo $env:GITHUB_REPOSITORY --tag $env:RELEASE_TAG --manifest artifacts/publish/build-manifest.json --output artifacts/public-download-verification.json
+          if ($LASTEXITCODE -ne 0) { throw 'Anonymous public downloads failed verification.' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Release-publication-audit
+          path: |
+            artifacts/publish/release-security-scan.json
+            artifacts/publish/release-provenance.json
+            artifacts/public-download-verification.json
+          retention-days: 90
