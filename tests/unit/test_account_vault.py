@@ -247,7 +247,11 @@ def test_mismatch_invalid_encrypted_and_corrupt_inputs_have_no_raw_values(setup)
 def test_zip_slip_is_rejected_without_extraction(name, tmp_path):
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as z:
-        z.writestr(name, json.dumps(mafile()))
+        # The constructor normalizes backslashes on Windows. Preserve the raw
+        # hostile ZIP name so this tests the archive, not the fixture writer.
+        info = zipfile.ZipInfo("placeholder.maFile")
+        info.filename = name
+        z.writestr(info, json.dumps(mafile()))
     with pytest.raises(parser.ImportProblem, match="ZIP_UNSAFE_PATH"):
         parser.parse_file(output.getvalue(), "zip")
     assert not list(tmp_path.iterdir())

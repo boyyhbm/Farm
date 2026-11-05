@@ -248,7 +248,7 @@ def parse_zip(raw):
                 raise ImportProblem("ZIP_ENTRY_LIMIT")
             seen, total, files = set(), 0, []
             for member in members:
-                name = member.filename
+                name = member.orig_filename
                 path = PurePosixPath(name.replace("\\", "/"))
                 if (
                     path.is_absolute()
