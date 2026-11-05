@@ -491,3 +491,14 @@ def test_confirmed_import_payload_is_sealed_against_later_uploads(setup):
     job = db.get(VaultImport, id)
     vault.process_import(db, store, job)
     assert job.imported == 1 and db.scalar(select(func.count(VaultRecord.id))) == 1
+
+
+def test_ambiguous_json_and_csv_fields_are_rejected_without_credential_echo():
+    for raw in (
+        b'{"account_name":"first","account_name":"second"}',
+        b'{"login":"owner","password":NaN}',
+    ):
+        with pytest.raises(parser.ImportProblem):
+            parser.parse_file(raw, "json")
+    with pytest.raises(parser.ImportProblem, match="DUPLICATE_CSV_HEADER"):
+        parser.parse_file(b"login,password,password\nowner,first,second\n", "csv")

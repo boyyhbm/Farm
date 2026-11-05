@@ -11,6 +11,7 @@ from typing import Literal
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 from sqlalchemy import func, select
+from starlette.requests import ClientDisconnect
 
 from app.core.config import settings
 from app.core.db import aware, get_db, utcnow
@@ -212,10 +213,13 @@ async def upload(
     # Raw request streaming avoids Starlette UploadFile's plaintext disk spool.
     body = bytearray()
     limit = parser.MAX_ZIP if kind == "zip" else parser.MAX_FILE
-    async for chunk in request.stream():
-        if len(body) + len(chunk) > limit:
-            raise HTTPException(413, "FILE_SIZE_LIMIT")
-        body.extend(chunk)
+    try:
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > limit:
+                raise HTTPException(413, "FILE_SIZE_LIMIT")
+            body.extend(chunk)
+    except ClientDisconnect:
+        raise HTTPException(400, "IMPORT_UPLOAD_INTERRUPTED") from None
     return await asyncio.to_thread(
         service.append_file, db, store, id, user.id, session(request), bytes(body), kind
     )

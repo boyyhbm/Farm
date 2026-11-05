@@ -66,10 +66,11 @@ def sensitive_filename(path: str) -> bool:
     name = path.replace("\\", "/").rsplit("/", 1)[-1].lower()
     return (
         (name.startswith(".env") and name not in (".env.example", ".env.template"))
-        or name.endswith((".sqlite", ".sqlite3", ".db", ".pfx", ".p12"))
+        or name.endswith((".sqlite", ".sqlite3", ".db", ".pfx", ".p12", ".dpapi"))
         or name in (
             "id_rsa", "id_ed25519", "credentials.json", "tokens.json",
             "desktop-config.json", "agent-config.json", "safety-state.json",
+            "notifications.dat", "protection-secrets.dat", "credentials.dat",
         )
     )
 

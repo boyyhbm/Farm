@@ -80,6 +80,8 @@ jobs:
           if (!$Manager.passed -or !($Manager.checks | Where-Object { $_.name -eq 'packaged_safety_engine_v2_health_and_component_checks' -and $_.passed })) { throw 'Installed Safety Engine validation required.' }
           $TestedPackage = git show "$($env:SOURCE_COMMIT):apps/desktop/package.json" | ConvertFrom-Json
           if ([version]($TestedPackage.version.Split('-')[0]) -ge [version]'0.5.0' -and !($Manager.checks | Where-Object { $_.name -eq 'packaged_account_vault_dpapi_import_restart_and_secret_free_responses' -and $_.passed })) { throw 'Installed Windows DPAPI vault smoke is required for version 0.5.0 and later.' }
+          if ([version]($TestedPackage.version.Split('-')[0]) -ge [version]'0.5.0' -and !($Manager.checks | Where-Object { $_.name -eq 'packaged_vault_large_zip_through_dashboard_proxy' -and $_.passed })) { throw 'Installed large ZIP proxy validation required.' }
+
 
           [xml]$JUnit = Get-Content artifacts/verification/windows-services.xml -Raw
           $Suite = $JUnit.testsuites.testsuite

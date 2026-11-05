@@ -1,0 +1,13 @@
+// Explicit synthetic large upload: no actual Steam credentials.
+process.chdir(__dirname);
+const {chromium}=require('@playwright/test'),fs=require('fs');
+(async()=>{
+ const browser=await chromium.launch({executablePath:process.env.E2E_BROWSER_PATH||(fs.existsSync('/usr/bin/chromium')?'/usr/bin/chromium':undefined),headless:true,args:['--no-sandbox']});
+ try{
+  const page=await browser.newPage();await page.goto('http://localhost:3000');await page.locator('input[name=username]').fill('vault-browser');await page.locator('input[name=password]').fill('browser-synthetic-password-123');await page.getByRole('button',{name:'Войти',exact:true}).click();await page.getByRole('heading',{name:'Обзор',exact:true}).waitFor();
+  await page.getByRole('navigation').getByRole('button',{name:'Авторизация',exact:true}).click();await page.getByRole('button',{name:'Разблокировать',exact:true}).click();await page.getByRole('dialog').locator('input[name=password]').fill('browser-synthetic-password-123');await page.getByRole('dialog').getByRole('button',{name:/Подтвердить/}).click();await page.getByRole('button',{name:'Заблокировать',exact:true}).waitFor();
+  await page.getByRole('button',{name:'Импорт аккаунтов',exact:true}).click();const dialog=page.getByRole('dialog');await dialog.locator('input[type=file]').setInputFiles('/tmp/vault-browser-large.zip');await dialog.getByLabel('Я вправе управлять всеми импортируемыми аккаунтами').check();
+  const responsePromise=page.waitForResponse(r=>r.url().includes('/files?kind=zip'),{timeout:60000});await dialog.getByRole('button',{name:'Проверить файлы',exact:true}).click();const response=await responsePromise;if(response.status()!==200)throw Error('Large ZIP upload HTTP '+response.status());await dialog.getByRole('cell',{name:'vault_large_browser_0',exact:true}).waitFor();const summary=await dialog.locator('p').filter({hasText:/^70.*записей/}).textContent();const count=Number(summary.match(/^\s*(\d+)/)[1]);if(count!==70)throw Error('Large ZIP preview count mismatch');
+  const report={checked_at:new Date().toISOString(),synthetic_credentials_only:true,zip_bytes:fs.statSync('/tmp/vault-browser-large.zip').size,records:count,http_status:response.status(),path:'Browser -> production Next rewrite -> FastAPI bounded stream -> encrypted local preview',passed:true};fs.writeFileSync('../../tests/e2e/artifacts/vault-large-zip-result.json',JSON.stringify(report,null,2));console.log(JSON.stringify(report,null,2));await dialog.getByRole('button',{name:'Close',exact:true}).click();
+ }finally{await browser.close()}
+})().catch(e=>{console.error(e);process.exitCode=1});

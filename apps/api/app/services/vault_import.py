@@ -163,6 +163,19 @@ def credential(value):
     return result
 
 
+def unique_json_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ImportProblem("DUPLICATE_JSON_FIELD")
+        result[key] = value
+    return result
+
+
+def reject_json_constant(_value):
+    raise ImportProblem("INVALID_JSON_NUMBER")
+
+
 def parse_file(raw, kind):
     if not raw or len(raw) > (MAX_ZIP if kind == "zip" else MAX_FILE):
         raise ImportProblem("FILE_SIZE_LIMIT")
@@ -174,7 +187,11 @@ def parse_file(raw, kind):
         raise ImportProblem("UTF8_REQUIRED") from None
     try:
         if kind in ("json", "mafile"):
-            value = json.loads(source)
+            value = json.loads(
+                source,
+                object_pairs_hook=unique_json_object,
+                parse_constant=reject_json_constant,
+            )
             if kind == "mafile":
                 values, parser = [value], guard
             else:
@@ -195,6 +212,8 @@ def parse_file(raw, kind):
                 "account_name",
             }:
                 raise ImportProblem("CSV_LOGIN_HEADER_REQUIRED")
+            if len(set(reader.fieldnames)) != len(reader.fieldnames):
+                raise ImportProblem("DUPLICATE_CSV_HEADER")
             values, parser = list(reader), credential
         elif kind == "txt":
             values = []

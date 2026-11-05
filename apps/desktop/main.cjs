@@ -333,6 +333,27 @@ async function smokeTest() {
     const guardFile = JSON.stringify({ account_name: 'vault_native_smoke', shared_secret: guardSecret, identity_secret: crypto.randomBytes(20).toString('base64'), Session: { SteamID: '76561199999888883' } });
     const mapped = await vaultCall(`/imports/${importStage.id}/files?kind=mafile`, guardFile, 'POST', { 'Content-Type': 'application/octet-stream' });
     if (JSON.stringify(mapped).includes(guardSecret) || mapped.total !== 1 || mapped.items[0].guard_status !== 'PRESENT') throw new Error('Vault Guard mapping failed');
+
+    // Synthetic uncompressed ZIP exceeds Next's former 10 MiB proxy limit.
+    const zipLocals = [], zipCentrals = []; let zipOffset = 0;
+    const crc32 = require('node:zlib').crc32;
+    for (let index = 0; index < 128; index++) {
+      const name = Buffer.from(`${index}.maFile`);
+      const value = Buffer.from(JSON.stringify({ account_name: `native_large_${index}`, shared_secret: crypto.randomBytes(20).toString('base64'), identity_secret: crypto.randomBytes(20).toString('base64'), Session: { synthetic_padding: 'X'.repeat(100000) } }));
+      const crc = crc32(value) >>> 0;
+      const local = Buffer.alloc(30); local.writeUInt32LE(0x04034b50); local.writeUInt16LE(20, 4); local.writeUInt16LE(33, 12); local.writeUInt32LE(crc, 14); local.writeUInt32LE(value.length, 18); local.writeUInt32LE(value.length, 22); local.writeUInt16LE(name.length, 26);
+      zipLocals.push(local, name, value);
+      const central = Buffer.alloc(46); central.writeUInt32LE(0x02014b50); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(33, 14); central.writeUInt32LE(crc, 16); central.writeUInt32LE(value.length, 20); central.writeUInt32LE(value.length, 24); central.writeUInt16LE(name.length, 28); central.writeUInt32LE(zipOffset, 42); zipCentrals.push(central, name);
+      zipOffset += local.length + name.length + value.length;
+    }
+    const centralBytes = Buffer.concat(zipCentrals), zipEnd = Buffer.alloc(22);
+    zipEnd.writeUInt32LE(0x06054b50); zipEnd.writeUInt16LE(128, 8); zipEnd.writeUInt16LE(128, 10); zipEnd.writeUInt32LE(centralBytes.length, 12); zipEnd.writeUInt32LE(zipOffset, 16);
+    const largeZip = Buffer.concat([...zipLocals, centralBytes, zipEnd]);
+    const largeStage = await vaultCall('/imports', { confirmed: true });
+    const largeResponse = await fetch(`${ORIGIN}/api/v1/vault/imports/${largeStage.id}/files?kind=zip`, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/octet-stream' }, body: largeZip });
+    if (!largeResponse.ok || (await largeResponse.json()).total !== 128 || largeZip.length <= 10 * 1024 * 1024) throw new Error('Packaged dashboard proxy truncated a supported large ZIP import');
+    await vaultCall(`/imports/${largeStage.id}`, undefined, 'DELETE');
+    check('packaged_vault_large_zip_through_dashboard_proxy');
     await vaultCall(`/imports/${importStage.id}/commit`, { confirmed: true });
     let imported;
     for (let attempt = 0; attempt < 100; attempt++) {

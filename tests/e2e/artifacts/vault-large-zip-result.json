@@ -1,0 +1,9 @@
+{
+  "checked_at": "2026-11-05T02:48:38.668Z",
+  "synthetic_credentials_only": true,
+  "zip_bytes": 12815384,
+  "records": 70,
+  "http_status": 200,
+  "path": "Browser -> production Next rewrite -> FastAPI bounded stream -> encrypted local preview",
+  "passed": true
+}
